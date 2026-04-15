@@ -34,9 +34,28 @@ function updateSummary() {
     counts[select.value] += 1;
   });
 
-  summary.innerHTML = STATUS_OPTIONS.map(
-    (value) => `<span class="badge">${value}: ${counts[value]}</span>`
-  ).join("");
+  summary.innerHTML = "";
+  STATUS_OPTIONS.forEach((value) => {
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.textContent = `${value}: ${counts[value]}`;
+    summary.appendChild(badge);
+  });
+}
+
+function createStatusSelect(year, seriesName, paper) {
+  const select = document.createElement("select");
+  select.className = "status";
+  select.setAttribute("aria-label", `${year} ${seriesName} ${paper} status`);
+
+  STATUS_OPTIONS.forEach((status) => {
+    const option = document.createElement("option");
+    option.value = status;
+    option.textContent = status;
+    select.appendChild(option);
+  });
+
+  return select;
 }
 
 function buildTracker() {
@@ -50,37 +69,39 @@ function buildTracker() {
   currentYears(safeYearCount).forEach((year) => {
     const yearCard = document.createElement("article");
     yearCard.className = "year-card";
-    yearCard.innerHTML = `<h2>${subject} - ${year}</h2>`;
+    const heading = document.createElement("h2");
+    heading.textContent = `${subject} - ${year}`;
+    yearCard.appendChild(heading);
 
     SERIES.forEach((seriesName) => {
       const section = document.createElement("section");
       section.className = "series";
 
       const table = document.createElement("table");
-      table.innerHTML = `
-        <thead>
-          <tr>
-            <th>Series: ${seriesName}</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${papers
-            .map(
-              (paper) => `
-            <tr>
-              <td>${paper}</td>
-              <td>
-                <select class="status" aria-label="${year} ${seriesName} ${paper} status">
-                  ${STATUS_OPTIONS.map((status) => `<option value="${status}">${status}</option>`).join("")}
-                </select>
-              </td>
-            </tr>
-          `
-            )
-            .join("")}
-        </tbody>
-      `;
+      const tableHead = document.createElement("thead");
+      const headerRow = document.createElement("tr");
+      const seriesHeader = document.createElement("th");
+      const statusHeader = document.createElement("th");
+      seriesHeader.textContent = `Series: ${seriesName}`;
+      statusHeader.textContent = "Status";
+      headerRow.appendChild(seriesHeader);
+      headerRow.appendChild(statusHeader);
+      tableHead.appendChild(headerRow);
+
+      const tableBody = document.createElement("tbody");
+      papers.forEach((paper) => {
+        const row = document.createElement("tr");
+        const paperCell = document.createElement("td");
+        const statusCell = document.createElement("td");
+        paperCell.textContent = paper;
+        statusCell.appendChild(createStatusSelect(year, seriesName, paper));
+        row.appendChild(paperCell);
+        row.appendChild(statusCell);
+        tableBody.appendChild(row);
+      });
+
+      table.appendChild(tableHead);
+      table.appendChild(tableBody);
 
       section.appendChild(table);
       yearCard.appendChild(section);

@@ -10,4 +10,4 @@ Simple browser-based tracker for IAL past paper practice.
 - Live status summary counts
 
 ## Run locally
-Open `/home/runner/work/PastPaperTracker/PastPaperTracker/index.html` in a browser.
+Open `index.html` in a browser.
