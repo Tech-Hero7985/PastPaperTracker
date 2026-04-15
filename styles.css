@@ -1,0 +1,104 @@
+:root {
+  color-scheme: light;
+  font-family: Arial, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #f5f7fb;
+}
+
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  gap: 0.5rem;
+  align-items: end;
+  background: #fff;
+  padding: 1rem;
+  border-radius: 8px;
+}
+
+.controls label {
+  font-size: 0.9rem;
+  color: #334155;
+}
+
+.controls input,
+.controls select,
+.controls button {
+  padding: 0.6rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
+
+.controls button {
+  cursor: pointer;
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+
+.summary {
+  margin-top: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.badge {
+  background: #fff;
+  border: 1px solid #dbe3f0;
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+.tracker {
+  margin-top: 1rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.year-card {
+  background: #fff;
+  border: 1px solid #dbe3f0;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.series {
+  margin-top: 0.8rem;
+}
+
+.series table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.35rem;
+}
+
+.series th,
+.series td {
+  border-bottom: 1px solid #edf2f7;
+  text-align: left;
+  padding: 0.4rem;
+}
+
+.status {
+  min-width: 180px;
+}
+
+@media (max-width: 720px) {
+  .controls {
+    grid-template-columns: 1fr;
+  }
+}

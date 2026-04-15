@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IAL Past Paper Tracker</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>IAL Past Paper Tracker</h1>
+
+    <section class="controls">
+      <label for="subject">Subject</label>
+      <select id="subject"></select>
+
+      <label for="years">Goal (years to solve)</label>
+      <input id="years" type="number" min="1" max="12" value="2" />
+
+      <button id="generate" type="button">Generate Tracker</button>
+    </section>
+
+    <section id="summary" class="summary" aria-live="polite"></section>
+    <section id="tracker" class="tracker"></section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
