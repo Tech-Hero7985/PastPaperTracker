@@ -8,7 +8,13 @@
 </head>
 <body>
   <main class="container">
-    <h1>IAL Past Paper Tracker</h1>
+    <header class="top-bar">
+      <h1>IAL Past Paper Tracker</h1>
+      <div class="top-actions">
+        <button id="themeToggle" class="icon-button" type="button" aria-label="Toggle dark mode">🌙</button>
+        <button id="settingsButton" class="icon-button" type="button" aria-label="Open settings">⚙️</button>
+      </div>
+    </header>
 
     <section class="controls">
       <label for="subject">Subject</label>
@@ -23,6 +29,15 @@
     <section id="summary" class="summary" aria-live="polite"></section>
     <section id="tracker" class="tracker"></section>
   </main>
+
+  <dialog id="settingsDialog" class="settings-dialog" aria-labelledby="settingsTitle">
+    <div class="settings-header">
+      <h2 id="settingsTitle">Settings</h2>
+      <button id="closeSettings" class="icon-button" type="button" aria-label="Close settings">✕</button>
+    </div>
+    <p class="settings-hint">Choose which papers appear on the tracker.</p>
+    <section id="paperSettings" class="paper-settings"></section>
+  </dialog>
 
   <script src="script.js"></script>
 </body>
