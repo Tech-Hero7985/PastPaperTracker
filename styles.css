@@ -11,6 +11,8 @@
   --brand-strong: #6d28d9;
   --badge-bg: #1d2538;
   --success: #10b981;
+  --brand-rgb: 124, 58, 237;
+  --backdrop-rgb: 2, 6, 23;
 }
 
 :root[data-theme="light"] {
@@ -25,11 +27,13 @@
   --brand-strong: #4338ca;
   --badge-bg: #f8fafc;
   --success: #059669;
+  --brand-rgb: 79, 70, 229;
+  --backdrop-rgb: 15, 23, 42;
 }
 
 body {
   margin: 0;
-  background: radial-gradient(circle at top right, rgba(124, 58, 237, 0.25), transparent 40%), var(--bg);
+  background: radial-gradient(circle at top right, rgba(var(--brand-rgb), 0.25), transparent 40%), var(--bg);
   color: var(--text);
   transition: background 0.25s ease, color 0.25s ease;
 }
@@ -185,7 +189,7 @@ h1 {
 }
 
 .settings-dialog::backdrop {
-  background: rgba(2, 6, 23, 0.55);
+  background: rgba(var(--backdrop-rgb), 0.55);
   backdrop-filter: blur(2px);
 }
 

@@ -240,19 +240,17 @@ themeToggle.addEventListener("click", () => {
   applyTheme(state.theme === "dark" ? "light" : "dark");
 });
 
-if (typeof settingsDialog.addEventListener === "function") {
-  settingsDialog.addEventListener("click", (event) => {
-    const dialogDimensions = settingsDialog.getBoundingClientRect();
-    const clickedInDialog =
-      event.clientX >= dialogDimensions.left &&
-      event.clientX <= dialogDimensions.right &&
-      event.clientY >= dialogDimensions.top &&
-      event.clientY <= dialogDimensions.bottom;
-    if (!clickedInDialog) {
-      settingsDialog.close();
-    }
-  });
-}
+settingsDialog.addEventListener("click", (event) => {
+  const dialogDimensions = settingsDialog.getBoundingClientRect();
+  const clickedInDialog =
+    event.clientX >= dialogDimensions.left &&
+    event.clientX <= dialogDimensions.right &&
+    event.clientY >= dialogDimensions.top &&
+    event.clientY <= dialogDimensions.bottom;
+  if (!clickedInDialog) {
+    settingsDialog.close();
+  }
+});
 
 applyTheme(state.theme);
 buildPaperSettings();
