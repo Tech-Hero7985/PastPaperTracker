@@ -1,23 +1,43 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>IAL Past Paper Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@300;400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="logo">
+        <span class="logo-mark">◈</span>
+        <span class="logo-text">IAL Tracker</span>
+      </div>
+      <p class="tagline">Track your past paper progress</p>
+    </div>
+  </header>
+
   <main class="container">
-    <h1>IAL Past Paper Tracker</h1>
-
-    <section class="controls">
-      <label for="subject">Subject</label>
-      <select id="subject"></select>
-
-      <label for="years">Goal (years to solve)</label>
-      <input id="years" type="number" min="1" max="12" value="2" />
-
-      <button id="generate" type="button">Generate Tracker</button>
+    <section class="controls-card">
+      <div class="controls">
+        <div class="field">
+          <label for="subject">Subject</label>
+          <select id="subject"></select>
+        </div>
+        <div class="field">
+          <label for="years">Years to cover</label>
+          <input id="years" type="number" min="1" max="12" value="2" />
+        </div>
+        <button id="generate" type="button">
+          <span>Generate</span>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
     </section>
 
     <section id="summary" class="summary" aria-live="polite"></section>
