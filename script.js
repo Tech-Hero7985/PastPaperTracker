@@ -7,12 +7,15 @@ const SUBJECT_PAPERS = {
 
 const SERIES = ["January", "May/June", "October/November"];
 const STATUS_OPTIONS = ["Not Done", "In Progress", "Done", "Done + Reviewed"];
+const STORAGE_KEY = "pastPaperTrackerStateV1";
 
 const subjectSelect = document.getElementById("subject");
 const yearsInput = document.getElementById("years");
 const generateButton = document.getElementById("generate");
 const tracker = document.getElementById("tracker");
 const summary = document.getElementById("summary");
+
+const trackerState = loadState();
 
 function buildSubjectOptions() {
   Object.keys(SUBJECT_PAPERS).forEach((subject) => {
@@ -28,6 +31,54 @@ function currentYears(count) {
   return Array.from({ length: count }, (_, index) => thisYear - index);
 }
 
+function normalizeYears(value) {
+  const years = Number.parseInt(value, 10);
+  if (Number.isNaN(years)) {
+    return 2;
+  }
+
+  return Math.min(Math.max(years, 1), 12);
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      return {
+        subject: "Mathematics",
+        years: 2,
+        statuses: {},
+      };
+    }
+
+    const parsed = JSON.parse(raw);
+    const defaultSubject = Object.keys(SUBJECT_PAPERS)[0];
+    const safeSubject = Object.prototype.hasOwnProperty.call(SUBJECT_PAPERS, parsed.subject)
+      ? parsed.subject
+      : defaultSubject;
+
+    return {
+      subject: safeSubject,
+      years: normalizeYears(parsed.years),
+      statuses: parsed.statuses && typeof parsed.statuses === "object" ? parsed.statuses : {},
+    };
+  } catch {
+    return {
+      subject: "Mathematics",
+      years: 2,
+      statuses: {},
+    };
+  }
+}
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(trackerState));
+}
+
+function statusKey(subject, year, seriesName, paper) {
+  return `${subject}|${year}|${seriesName}|${paper}`;
+}
+
 function updateSummary() {
   const counts = STATUS_OPTIONS.reduce((acc, value) => ({ ...acc, [value]: 0 }), {});
   tracker.querySelectorAll("select.status").forEach((select) => {
@@ -40,10 +91,14 @@ function updateSummary() {
 }
 
 function buildTracker() {
-  const yearsToTrack = Number.parseInt(yearsInput.value, 10);
-  const safeYearCount = Number.isNaN(yearsToTrack) ? 1 : Math.min(Math.max(yearsToTrack, 1), 12);
+  const safeYearCount = normalizeYears(yearsInput.value);
   const subject = subjectSelect.value;
   const papers = SUBJECT_PAPERS[subject];
+
+  trackerState.subject = subject;
+  trackerState.years = safeYearCount;
+  yearsInput.value = safeYearCount;
+  saveState();
 
   tracker.innerHTML = "";
 
@@ -71,7 +126,7 @@ function buildTracker() {
             <tr>
               <td>${paper}</td>
               <td>
-                <select class="status" aria-label="${year} ${seriesName} ${paper} status">
+                <select class="status" data-status-key="${statusKey(subject, year, seriesName, paper)}" aria-label="${year} ${seriesName} ${paper} status">
                   ${STATUS_OPTIONS.map((status) => `<option value="${status}">${status}</option>`).join("")}
                 </select>
               </td>
@@ -90,12 +145,26 @@ function buildTracker() {
   });
 
   tracker.querySelectorAll("select.status").forEach((select) => {
-    select.addEventListener("change", updateSummary);
+    const key = select.dataset.statusKey;
+    const savedStatus = trackerState.statuses[key];
+    if (STATUS_OPTIONS.includes(savedStatus)) {
+      select.value = savedStatus;
+    }
+
+    select.addEventListener("change", (event) => {
+      trackerState.statuses[key] = event.target.value;
+      saveState();
+      updateSummary();
+    });
   });
 
   updateSummary();
 }
 
 buildSubjectOptions();
+if (Object.keys(SUBJECT_PAPERS).includes(trackerState.subject)) {
+  subjectSelect.value = trackerState.subject;
+}
+yearsInput.value = trackerState.years;
 generateButton.addEventListener("click", buildTracker);
 buildTracker();

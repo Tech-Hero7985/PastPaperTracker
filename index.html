@@ -11,13 +11,19 @@
     <h1>IAL Past Paper Tracker</h1>
 
     <section class="controls">
-      <label for="subject">Subject</label>
-      <select id="subject"></select>
+      <div class="control-field">
+        <label for="subject">Subject</label>
+        <select id="subject"></select>
+      </div>
 
-      <label for="years">Goal (years to solve)</label>
-      <input id="years" type="number" min="1" max="12" value="2" />
+      <div class="control-field">
+        <label for="years">Goal (years to solve)</label>
+        <input id="years" type="number" min="1" max="12" value="2" />
+      </div>
 
-      <button id="generate" type="button">Generate Tracker</button>
+      <div class="control-action">
+        <button id="generate" type="button">Generate Tracker</button>
+      </div>
     </section>
 
     <section id="summary" class="summary" aria-live="polite"></section>
