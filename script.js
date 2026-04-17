@@ -8,6 +8,7 @@ const SUBJECT_PAPERS = {
 const SERIES = ["January", "May/June", "October/November"];
 const STATUS_OPTIONS = ["Not Done", "In Progress", "Done", "Done + Reviewed"];
 const STORAGE_KEY = "pastPaperTrackerStateV1";
+const DEFAULT_SUBJECT = "Mathematics";
 
 const subjectSelect = document.getElementById("subject");
 const yearsInput = document.getElementById("years");
@@ -45,17 +46,16 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
       return {
-        subject: "Mathematics",
+        subject: DEFAULT_SUBJECT,
         years: 2,
         statuses: {},
       };
     }
 
     const parsed = JSON.parse(raw);
-    const defaultSubject = Object.keys(SUBJECT_PAPERS)[0];
-    const safeSubject = Object.prototype.hasOwnProperty.call(SUBJECT_PAPERS, parsed.subject)
+    const safeSubject = Object.hasOwn(SUBJECT_PAPERS, parsed.subject)
       ? parsed.subject
-      : defaultSubject;
+      : DEFAULT_SUBJECT;
 
     return {
       subject: safeSubject,
@@ -64,7 +64,7 @@ function loadState() {
     };
   } catch {
     return {
-      subject: "Mathematics",
+      subject: DEFAULT_SUBJECT,
       years: 2,
       statuses: {},
     };
