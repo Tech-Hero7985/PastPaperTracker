@@ -1,78 +1,119 @@
+// ── Data ──────────────────────────────────────────────────────────────────────
+
 const SUBJECT_PAPERS = {
   Mathematics: ["P1", "P2", "P3", "P4", "M1", "M2", "S1", "S2"],
-  Physics: ["Unit 1", "Unit 2", "Unit 3", "Unit 4", "Unit 5", "Unit 6"],
-  Chemistry: ["Unit 1", "Unit 2", "Unit 3", "Unit 4", "Unit 5", "Unit 6"],
-  Biology: ["Unit 1", "Unit 2", "Unit 3", "Unit 4", "Unit 5", "Unit 6"],
+  Physics:     ["Unit 1", "Unit 2", "Unit 3", "Unit 4", "Unit 5", "Unit 6"],
+  Chemistry:   ["Unit 1", "Unit 2", "Unit 3", "Unit 4", "Unit 5", "Unit 6"],
+  Biology:     ["Unit 1", "Unit 2", "Unit 3", "Unit 4", "Unit 5", "Unit 6"],
 };
 
 const SERIES = ["January", "May/June", "October/November"];
 const STATUS_OPTIONS = ["Not Done", "In Progress", "Done", "Done + Reviewed"];
-const STORAGE_KEY = "ial-tracker-state";
+
+// ── Storage keys ──────────────────────────────────────────────────────────────
+
+const KEY_STATUS   = "ial-tracker-state";
+const KEY_SETTINGS = "ial-tracker-settings";
+const paperSelKey  = (subject) => `ial-tracker-papers__${subject}`;
+
+// ── DOM refs ──────────────────────────────────────────────────────────────────
 
 const subjectSelect = document.getElementById("subject");
 const yearsInput    = document.getElementById("years");
-const generateBtn   = document.getElementById("generate");
+const chipGrid      = document.getElementById("chip-grid");
+const pickAllBtn    = document.getElementById("pick-all");
+const pickNoneBtn   = document.getElementById("pick-none");
 const tracker       = document.getElementById("tracker");
 const summary       = document.getElementById("summary");
 
-// ── Persistence ──────────────────────────────────────────────────────────────
+// ── Persistence helpers ───────────────────────────────────────────────────────
 
-function loadState() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
+function loadStatus() {
+  try { return JSON.parse(localStorage.getItem(KEY_STATUS)) || {}; }
   catch { return {}; }
 }
 
-function saveState() {
+function saveStatus() {
   const state = {};
   tracker.querySelectorAll("select.status").forEach((s) => {
     state[s.dataset.key] = s.value;
   });
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  // Merge with existing (so other subjects aren't wiped)
+  const existing = loadStatus();
+  localStorage.setItem(KEY_STATUS, JSON.stringify({ ...existing, ...state }));
 }
 
 function loadSettings() {
-  try { return JSON.parse(localStorage.getItem("ial-tracker-settings")); }
+  try { return JSON.parse(localStorage.getItem(KEY_SETTINGS)); }
   catch { return null; }
 }
 
 function saveSettings() {
-  localStorage.setItem(
-    "ial-tracker-settings",
-    JSON.stringify({ subject: subjectSelect.value, years: yearsInput.value })
-  );
+  localStorage.setItem(KEY_SETTINGS, JSON.stringify({
+    subject: subjectSelect.value,
+    years:   yearsInput.value,
+  }));
 }
 
-// ── UI helpers ───────────────────────────────────────────────────────────────
+/** Returns the saved paper selection for a subject, defaulting to ALL papers */
+function loadPaperSelection(subject) {
+  try {
+    const raw = localStorage.getItem(paperSelKey(subject));
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  // Default: all papers selected
+  return [...SUBJECT_PAPERS[subject]];
+}
 
-function buildSubjectOptions() {
-  Object.keys(SUBJECT_PAPERS).forEach((subject) => {
-    const opt = document.createElement("option");
-    opt.value = subject;
-    opt.textContent = subject;
-    subjectSelect.appendChild(opt);
+function savePaperSelection(subject, selected) {
+  localStorage.setItem(paperSelKey(subject), JSON.stringify(selected));
+}
+
+// ── Paper picker ──────────────────────────────────────────────────────────────
+
+function getSelectedPapers() {
+  return [...chipGrid.querySelectorAll(".chip.active")].map((c) => c.dataset.paper);
+}
+
+function buildChips(subject) {
+  const allPapers = SUBJECT_PAPERS[subject];
+  const saved     = loadPaperSelection(subject);
+
+  chipGrid.innerHTML = "";
+
+  allPapers.forEach((paper) => {
+    const chip = document.createElement("button");
+    chip.type          = "button";
+    chip.className     = "chip" + (saved.includes(paper) ? " active" : "");
+    chip.dataset.paper = paper;
+    chip.innerHTML     = `<span class="chip-check">✓</span>${paper}`;
+
+    chip.addEventListener("click", () => {
+      chip.classList.toggle("active");
+      const sel = getSelectedPapers();
+      savePaperSelection(subject, sel);
+      buildTracker();
+    });
+
+    chipGrid.appendChild(chip);
   });
 }
 
-function currentYears(count) {
-  const thisYear = new Date().getFullYear();
-  return Array.from({ length: count }, (_, i) => thisYear - i);
-}
+pickAllBtn.addEventListener("click", () => {
+  const subject = subjectSelect.value;
+  chipGrid.querySelectorAll(".chip").forEach((c) => c.classList.add("active"));
+  savePaperSelection(subject, [...SUBJECT_PAPERS[subject]]);
+  buildTracker();
+});
 
-function applyStatusStyle(select) {
-  select.dataset.status = select.value;
-}
+pickNoneBtn.addEventListener("click", () => {
+  const subject = subjectSelect.value;
+  chipGrid.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
+  savePaperSelection(subject, []);
+  buildTracker();
+});
 
-function updateYearProgress(yearCard) {
-  const selects = yearCard.querySelectorAll("select.status");
-  const done = [...selects].filter(
-    (s) => s.value === "Done" || s.value === "Done + Reviewed"
-  ).length;
-  const pct = selects.length ? Math.round((done / selects.length) * 100) : 0;
-  const fill  = yearCard.querySelector(".year-progress-fill");
-  const label = yearCard.querySelector(".year-progress-label");
-  if (fill)  fill.style.width  = pct + "%";
-  if (label) label.textContent = `${done}/${selects.length} done`;
-}
+// ── Summary ───────────────────────────────────────────────────────────────────
 
 function updateSummary() {
   const counts = STATUS_OPTIONS.reduce((a, v) => ({ ...a, [v]: 0 }), {});
@@ -84,45 +125,73 @@ function updateSummary() {
   ).join("");
 }
 
-// ── Core builder ─────────────────────────────────────────────────────────────
+// ── Year card progress ────────────────────────────────────────────────────────
+
+function updateYearProgress(card) {
+  const selects = card.querySelectorAll("select.status");
+  const done    = [...selects].filter(
+    (s) => s.value === "Done" || s.value === "Done + Reviewed"
+  ).length;
+  const pct   = selects.length ? Math.round((done / selects.length) * 100) : 0;
+  const fill  = card.querySelector(".year-progress-fill");
+  const label = card.querySelector(".year-progress-label");
+  if (fill)  fill.style.width  = pct + "%";
+  if (label) label.textContent = `${done}/${selects.length} done`;
+}
+
+// ── Main tracker builder ──────────────────────────────────────────────────────
 
 function buildTracker() {
-  const raw   = Number.parseInt(yearsInput.value, 10);
-  const count = Number.isNaN(raw) ? 1 : Math.min(Math.max(raw, 1), 12);
+  const raw     = Number.parseInt(yearsInput.value, 10);
+  const count   = Number.isNaN(raw) ? 1 : Math.min(Math.max(raw, 1), 12);
   const subject = subjectSelect.value;
-  const papers  = SUBJECT_PAPERS[subject];
-  const saved   = loadState();
+  const papers  = getSelectedPapers();
+  const saved   = loadStatus();
 
   tracker.innerHTML = "";
 
-  currentYears(count).forEach((year, cardIndex) => {
+  if (papers.length === 0) {
+    tracker.innerHTML = `<div class="empty-state">No papers selected — pick at least one above to start tracking.</div>`;
+    updateSummary();
+    return;
+  }
+
+  const years = Array.from({ length: count }, (_, i) => new Date().getFullYear() - i);
+
+  years.forEach((year, cardIdx) => {
     const card = document.createElement("article");
     card.className = "year-card";
-    card.style.animationDelay = `${cardIndex * 0.07}s`;
+    card.style.animationDelay = `${cardIdx * 0.07}s`;
 
+    // Header
     const header = document.createElement("div");
     header.className = "year-card-header";
     header.innerHTML = `
       <h2 class="year-title">${subject} &mdash; <span>${year}</span></h2>
       <div class="year-progress-wrap">
         <span class="year-progress-label">0 done</span>
-        <div class="year-progress-bar">
-          <div class="year-progress-fill"></div>
-        </div>
+        <div class="year-progress-bar"><div class="year-progress-fill"></div></div>
       </div>`;
     card.appendChild(header);
 
+    // Series columns
     const body = document.createElement("div");
     body.className = "year-body";
 
     SERIES.forEach((seriesName) => {
       const section = document.createElement("section");
       section.className = "series";
+      section.dataset.series = seriesName;
 
-      const title = document.createElement("p");
-      title.className = "series-title";
-      title.textContent = seriesName;
-      section.appendChild(title);
+      // Visible series header
+      section.innerHTML = `
+        <div class="series-header">
+          <span class="series-dot"></span>
+          <span class="series-name">${seriesName}</span>
+        </div>`;
+
+      const wrap  = document.createElement("div");
+      wrap.className = "series-table-wrap";
 
       const table = document.createElement("table");
       const tbody = document.createElement("tbody");
@@ -150,17 +219,19 @@ function buildTracker() {
       });
 
       table.appendChild(tbody);
-      section.appendChild(table);
+      wrap.appendChild(table);
+      section.appendChild(wrap);
       body.appendChild(section);
     });
 
     card.appendChild(body);
     tracker.appendChild(card);
 
+    // Events
     card.querySelectorAll("select.status").forEach((sel) => {
       sel.addEventListener("change", () => {
-        applyStatusStyle(sel);
-        saveState();
+        sel.dataset.status = sel.value;
+        saveStatus();
         updateSummary();
         updateYearProgress(card);
       });
@@ -173,15 +244,37 @@ function buildTracker() {
   updateSummary();
 }
 
-// ── Init ─────────────────────────────────────────────────────────────────────
+// ── Subject change: rebuild chips + tracker ───────────────────────────────────
 
-buildSubjectOptions();
-
-const settings = loadSettings();
-if (settings) {
-  subjectSelect.value = settings.subject;
-  yearsInput.value    = settings.years;
+function onSubjectChange() {
+  buildChips(subjectSelect.value);
+  buildTracker();
 }
 
-generateBtn.addEventListener("click", buildTracker);
-buildTracker();
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+// Populate subject dropdown
+Object.keys(SUBJECT_PAPERS).forEach((subject) => {
+  const opt = document.createElement("option");
+  opt.value = subject;
+  opt.textContent = subject;
+  subjectSelect.appendChild(opt);
+});
+
+// Restore last settings
+const settings = loadSettings();
+if (settings) {
+  if (settings.subject && SUBJECT_PAPERS[settings.subject]) {
+    subjectSelect.value = settings.subject;
+  }
+  if (settings.years) {
+    yearsInput.value = settings.years;
+  }
+}
+
+subjectSelect.addEventListener("change", onSubjectChange);
+yearsInput.addEventListener("change", buildTracker);
+yearsInput.addEventListener("input",  buildTracker);
+
+// First render
+onSubjectChange();
