@@ -162,9 +162,7 @@ function buildTracker() {
 }
 
 buildSubjectOptions();
-if (Object.keys(SUBJECT_PAPERS).includes(trackerState.subject)) {
-  subjectSelect.value = trackerState.subject;
-}
+subjectSelect.value = trackerState.subject;
 yearsInput.value = trackerState.years;
 generateButton.addEventListener("click", buildTracker);
 buildTracker();
