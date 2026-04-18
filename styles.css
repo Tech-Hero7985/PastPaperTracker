@@ -712,3 +712,57 @@ select.status[data-status="Done + Reviewed"] { border-left: 3px solid var(--stat
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* ── Beta testers ────────────────────────────────────────────────────────── */
+.beta-testers {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-shrink: 0;
+}
+
+.beta-label {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.beta-avatars {
+  display: flex;
+  align-items: center;
+}
+
+.beta-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--av-color) 15%, transparent);
+  border: 2px solid var(--av-color);
+  color: var(--av-color);
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  margin-left: -6px;
+  transition: transform 0.15s, box-shadow 0.15s, z-index 0s;
+  position: relative;
+  z-index: 1;
+}
+
+.beta-avatar:first-child { margin-left: 0; }
+
+.beta-avatar:hover {
+  transform: translateY(-3px) scale(1.15);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--av-color) 40%, transparent);
+  z-index: 10;
+}
+
+@media (max-width: 860px) {
+  .beta-label { display: none; }
+}
