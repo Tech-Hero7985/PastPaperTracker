@@ -1,6 +1,6 @@
 # ◈ IAL Past Paper Tracker
 
-A free, dark-mode web app for tracking Edexcel IAL past paper progress — with cloud sync across all your devices.
+A free, dark-mode web app for tracking Edexcel IAL past paper progress - with cloud sync across all your devices.
 
 **Live site → [wadhwanimedia.me/PastPaperTracker](http://wadhwanimedia.me/PastPaperTracker/)**
 
@@ -8,14 +8,14 @@ A free, dark-mode web app for tracking Edexcel IAL past paper progress — with 
 
 ## Features
 
-- **4 subjects** — Mathematics, Physics, Chemistry, Biology
-- **Custom paper selection** — pick exactly which papers you're sitting (P3, P4, M1, etc.)
-- **Year range picker** — choose any range e.g. 2019 → 2024
-- **3 exam series per year** — January, May/June, October/November
-- **4 status levels** — Not Done, In Progress, Done, Done + Reviewed
-- **Per-card and overall progress bars** — visualise how far through you are at a glance
-- **Cloud sync** — create a free account and your progress syncs across every device
-- **Dark mode only** — easy on the eyes during long revision sessions
+- **4 subjects** - Mathematics, Physics, Chemistry, Biology
+- **Custom paper selection** - pick exactly which papers you're sitting (P3, P4, M1, etc.)
+- **Year range picker** - choose any range e.g. 2019 → 2024
+- **3 exam series per year** - January, May/June, October/November
+- **4 status levels** - Not Done, In Progress, Done, Done + Reviewed
+- **Per-card and overall progress bars** - visualise how far through you are at a glance
+- **Cloud sync** - create a free account and your progress syncs across every device
+- **Dark mode only** - easy on the eyes during long revision sessions
 
 ---
 
@@ -58,7 +58,7 @@ updated_at       timestamptz
 
 ## Run Locally
 
-No build step needed — it's plain HTML.
+No build step needed - it's plain HTML.
 
 ```bash
 git clone https://github.com/Tech-Hero7985/PastPaperTracker.git
@@ -83,7 +83,7 @@ open index.html
 
 ## Contributing
 
-This is a personal project but feedback and suggestions are welcome — open an issue or reach out.
+This is a personal project but feedback and suggestions are welcome - open an issue or reach out.
 
 ---
 
@@ -99,4 +99,4 @@ Thanks to the people who tested RC1 and helped catch bugs early:
 
 ## License
 
-MIT — free to use, modify, and share.
+MIT - free to use, modify, and share.
