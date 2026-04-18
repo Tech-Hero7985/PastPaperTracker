@@ -1,17 +1,18 @@
-
-// Force login on every page load — wipe the persisted session BEFORE
-// the Supabase client initialises so INITIAL_SESSION always fires with no user.
+// ── Force login on every page load ───────────────────────────────────────────
 localStorage.removeItem("sb-kymqjecvcnmpnjcxfpuv-auth-token");
 
+// ── Supabase ──────────────────────────────────────────────────────────────────
 const { createClient } = supabase;
 const sb = createClient(
   "https://kymqjecvcnmpnjcxfpuv.supabase.co",
   "sb_publishable_gtEiSZVEWFl_FAFFBG_XjQ_1MchKFyH"
 );
 
-let currentUser    = null;
-let settingsTimer  = null;
-let appInitialized = false;
+let currentUser          = null;
+let settingsTimer        = null;
+let statusSaveTimer      = null;
+let initializedForUserId = null;
+let appBootstrapped      = false;
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 const SUBJECT_PAPERS = {
@@ -23,10 +24,15 @@ const SUBJECT_PAPERS = {
 const SERIES         = ["January","May/June","October/November"];
 const STATUS_OPTIONS = ["Not Done","In Progress","Done","Done + Reviewed"];
 
+const THIS_YEAR  = new Date().getFullYear();
+const MIN_YEAR   = 2010;
+const MAX_YEAR   = THIS_YEAR;
+
 // ── Storage keys ──────────────────────────────────────────────────────────────
 const KEY_STATUS   = "ial-tracker-state";
 const KEY_SETTINGS = "ial-tracker-settings";
 const paperSelKey  = (s) => `ial-tracker-papers__${s}`;
+const yearRangeKey = (s) => `ial-tracker-yearrange__${s}`;
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const authOverlay   = document.getElementById("auth-overlay");
@@ -41,18 +47,13 @@ const logoutBtn     = document.getElementById("logout-btn");
 const userEmailEl   = document.getElementById("user-email");
 const userAvatarEl  = document.getElementById("user-avatar");
 const subjectSelect = document.getElementById("subject");
-const yearsInput    = document.getElementById("years");
+const yearFromSel   = document.getElementById("year-from");
+const yearToSel     = document.getElementById("year-to");
 const chipGrid      = document.getElementById("chip-grid");
 const pickAllBtn    = document.getElementById("pick-all");
 const pickNoneBtn   = document.getElementById("pick-none");
 const tracker       = document.getElementById("tracker");
 const summary       = document.getElementById("summary");
-
-// ── Loading spinner (shown while auth resolves on refresh) ────────────────────
-const loader = document.createElement("div");
-loader.id        = "auth-loader";
-loader.innerHTML = `<span class="loader-spinner"></span>`;
-document.body.appendChild(loader);
 
 // ── Sync toast ────────────────────────────────────────────────────────────────
 const toast = document.createElement("div");
@@ -60,11 +61,70 @@ toast.className = "sync-toast";
 toast.innerHTML = `<span class="sync-dot"></span>Saving…`;
 document.body.appendChild(toast);
 let toastTimer;
-
 function showToast() {
   clearTimeout(toastTimer);
   toast.classList.add("visible");
   toastTimer = setTimeout(() => toast.classList.remove("visible"), 1800);
+}
+
+// ── Populate year dropdowns ───────────────────────────────────────────────────
+function populateYearSelects() {
+  const years = [];
+  for (let y = MAX_YEAR; y >= MIN_YEAR; y--) years.push(y);
+  [yearFromSel, yearToSel].forEach((sel) => {
+    sel.innerHTML = "";
+    years.forEach((y) => {
+      const opt = document.createElement("option");
+      opt.value = y;
+      opt.textContent = y;
+      sel.appendChild(opt);
+    });
+  });
+}
+
+// ── Year range helpers ────────────────────────────────────────────────────────
+function loadYearRange(subject) {
+  try {
+    const raw = localStorage.getItem(yearRangeKey(subject));
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  // Default: current year back 2 years
+  return { from: THIS_YEAR - 2, to: THIS_YEAR };
+}
+
+function saveYearRange(subject, from, to) {
+  localStorage.setItem(yearRangeKey(subject), JSON.stringify({ from, to }));
+  debouncedSaveSettings();
+}
+
+function applyYearRange(subject) {
+  const { from, to } = loadYearRange(subject);
+  yearFromSel.value = from;
+  yearToSel.value   = to;
+  enforceRange();
+}
+
+// Make sure "from" never exceeds "to"
+function enforceRange() {
+  const from = parseInt(yearFromSel.value, 10);
+  const to   = parseInt(yearToSel.value,   10);
+  if (from > to) yearToSel.value = from;
+  // Disable "to" options below "from"
+  [...yearToSel.options].forEach((opt) => {
+    opt.disabled = parseInt(opt.value, 10) < parseInt(yearFromSel.value, 10);
+  });
+  // Disable "from" options above "to"
+  [...yearFromSel.options].forEach((opt) => {
+    opt.disabled = parseInt(opt.value, 10) > parseInt(yearToSel.value, 10);
+  });
+}
+
+function getYearsInRange() {
+  const from = parseInt(yearFromSel.value, 10);
+  const to   = parseInt(yearToSel.value,   10);
+  const years = [];
+  for (let y = to; y >= from; y--) years.push(y);
+  return years;
 }
 
 // ── Auth UI ───────────────────────────────────────────────────────────────────
@@ -117,68 +177,55 @@ signupBtn.addEventListener("click", async () => {
 });
 
 logoutBtn.addEventListener("click", async () => {
-  appInitialized = false;
   await sb.auth.signOut();
-  // Clear local cache on explicit logout
   localStorage.removeItem(KEY_STATUS);
   localStorage.removeItem(KEY_SETTINGS);
-  Object.keys(SUBJECT_PAPERS).forEach((s) => localStorage.removeItem(paperSelKey(s)));
+  Object.keys(SUBJECT_PAPERS).forEach((s) => {
+    localStorage.removeItem(paperSelKey(s));
+    localStorage.removeItem(yearRangeKey(s));
+  });
 });
 
 // ── App show/hide ─────────────────────────────────────────────────────────────
-function showApp() {
-  loader.style.display       = "none";
-  authOverlay.style.display  = "none";
-  appEl.style.display        = "block";
+function showApp()  { authOverlay.style.display = "none"; appEl.style.display = "block"; }
+function showAuth() { authOverlay.style.display = "flex"; appEl.style.display = "none";  }
+
+// ── Auth handlers ─────────────────────────────────────────────────────────────
+async function handleSignedInUser(user, event = "INITIAL") {
+  currentUser = user;
+  if (initializedForUserId === currentUser.id && appBootstrapped && event !== "SIGNED_IN") return;
+  initializedForUserId     = currentUser.id;
+  userEmailEl.textContent  = currentUser.email || "";
+  userAvatarEl.textContent = (currentUser.email?.[0] || "U").toUpperCase();
+  showApp();
+  await loadAllFromCloud();
+  initApp();
+  appBootstrapped = true;
 }
 
-function showAuth() {
-  loader.style.display       = "none";
-  authOverlay.style.display  = "flex";
-  appEl.style.display        = "none";
+function handleSignedOutUser() {
+  currentUser = null; initializedForUserId = null; appBootstrapped = false;
+  showAuth();
+  tracker.innerHTML = ""; summary.innerHTML = "";
 }
 
-// ── Auth state — single source of truth ───────────────────────────────────────
-// INITIAL_SESSION fires on every page load with the persisted session (or null).
-// SIGNED_IN fires when the user actually logs in.
-// SIGNED_OUT fires on logout or session expiry.
+(async function bootstrapAuth() {
+  const { data, error } = await sb.auth.getSession();
+  if (error) { handleSignedOutUser(); return; }
+  const user = data?.session?.user;
+  if (user) await handleSignedInUser(user, "INITIAL");
+  else      handleSignedOutUser();
+})();
+
 sb.auth.onAuthStateChange(async (event, session) => {
-  if (event === "SIGNED_OUT") {
-    currentUser    = null;
-    appInitialized = false;
-    tracker.innerHTML = "";
-    summary.innerHTML = "";
-    showAuth();
-    return;
-  }
-
-  // Handle both initial page load (INITIAL_SESSION) and fresh logins (SIGNED_IN)
-  if ((event === "INITIAL_SESSION" || event === "SIGNED_IN") && session?.user) {
-    // Don't re-initialise if this is a token refresh or duplicate event
-    if (appInitialized && event !== "SIGNED_IN") return;
-
-    currentUser = session.user;
-    userEmailEl.textContent  = currentUser.email;
-    userAvatarEl.textContent = (currentUser.email?.[0] ?? "U").toUpperCase();
-
-    showApp();
-
-    await loadAllFromCloud();
-    initApp();
-    appInitialized = true;
-    return;
-  }
-
-  // No session on initial load → show login
-  if (event === "INITIAL_SESSION" && !session) {
-    showAuth();
-  }
+  if (session?.user) await handleSignedInUser(session.user, event);
+  else               handleSignedOutUser();
 });
 
-// ── Cloud: load all data ──────────────────────────────────────────────────────
+// ── Cloud: load ───────────────────────────────────────────────────────────────
 async function loadAllFromCloud() {
   const { data: statuses } = await sb.from("paper_status").select("*");
-  if (statuses?.length) {
+  if (statuses) {
     const state = {};
     statuses.forEach((row) => {
       state[`${row.subject}__${row.year}__${row.series}__${row.paper}`] = row.status;
@@ -187,19 +234,26 @@ async function loadAllFromCloud() {
   }
 
   const { data: settings } = await sb
-    .from("user_settings")
-    .select("*")
-    .eq("user_id", currentUser.id)
-    .maybeSingle();
+    .from("user_settings").select("*")
+    .eq("user_id", currentUser.id).maybeSingle();
 
   if (settings) {
-    localStorage.setItem(KEY_SETTINGS, JSON.stringify({
-      subject: settings.subject,
-      years:   settings.years,
-    }));
-    if (settings.paper_selections) {
-      Object.entries(settings.paper_selections).forEach(([subj, papers]) => {
-        localStorage.setItem(paperSelKey(subj), JSON.stringify(papers));
+    localStorage.setItem(KEY_SETTINGS, JSON.stringify({ subject: settings.subject }));
+
+    const sel = settings.paper_selections || {};
+
+    // Paper selections
+    Object.keys(SUBJECT_PAPERS).forEach((subj) => {
+      if (Array.isArray(sel[subj])) {
+        localStorage.setItem(paperSelKey(subj), JSON.stringify(sel[subj]));
+      }
+    });
+
+    // Year ranges stored under __yearranges__
+    const ranges = sel.__yearranges__;
+    if (ranges && typeof ranges === "object") {
+      Object.entries(ranges).forEach(([subj, range]) => {
+        localStorage.setItem(yearRangeKey(subj), JSON.stringify(range));
       });
     }
   }
@@ -211,36 +265,43 @@ async function saveStatusToCloud(key, status) {
   showToast();
   const [subject, year, series, paper] = key.split("__");
   const { error } = await sb.from("paper_status").upsert({
-    user_id: currentUser.id,
-    subject,
-    year:    parseInt(year, 10),
-    series,
-    paper,
-    status,
+    user_id: currentUser.id, subject,
+    year: parseInt(year, 10), series, paper, status,
     updated_at: new Date().toISOString(),
   }, { onConflict: "user_id,subject,year,series,paper" });
   if (error) console.error("saveStatusToCloud:", error);
 }
 
-// ── Cloud: save settings (debounced) ─────────────────────────────────────────
+function debouncedSaveStatus(key, status) {
+  clearTimeout(statusSaveTimer);
+  statusSaveTimer = setTimeout(() => saveStatusToCloud(key, status), 250);
+}
+
+// ── Cloud: save settings ──────────────────────────────────────────────────────
 async function saveSettingsToCloud() {
   if (!currentUser) return;
   const paperSelections = {};
   Object.keys(SUBJECT_PAPERS).forEach((subj) => {
-    try {
-      const raw = localStorage.getItem(paperSelKey(subj));
-      if (raw) paperSelections[subj] = JSON.parse(raw);
-    } catch {}
+    const raw = localStorage.getItem(paperSelKey(subj));
+    if (raw) try { paperSelections[subj] = JSON.parse(raw); } catch {}
   });
+  // Store year ranges
+  const yearranges = {};
+  Object.keys(SUBJECT_PAPERS).forEach((subj) => {
+    const raw = localStorage.getItem(yearRangeKey(subj));
+    if (raw) try { yearranges[subj] = JSON.parse(raw); } catch {}
+  });
+  paperSelections.__yearranges__ = yearranges;
+
   const s = loadSettings();
-  const { error } = await sb.from("user_settings").upsert({
+  const range = loadYearRange(subjectSelect.value);
+  await sb.from("user_settings").upsert({
     user_id:          currentUser.id,
     subject:          s?.subject || subjectSelect.value,
-    years:            parseInt(s?.years || yearsInput.value, 10),
+    years:            range.to - range.from + 1,
     paper_selections: paperSelections,
     updated_at:       new Date().toISOString(),
   }, { onConflict: "user_id" });
-  if (error) console.error("saveSettingsToCloud:", error);
 }
 
 function debouncedSaveSettings() {
@@ -266,12 +327,14 @@ function loadSettings() {
   catch { return null; }
 }
 
-function saveSettings() {
-  localStorage.setItem(KEY_SETTINGS, JSON.stringify({
-    subject: subjectSelect.value,
-    years:   yearsInput.value,
-  }));
+function saveActiveSubject() {
+  localStorage.setItem(KEY_SETTINGS, JSON.stringify({ subject: subjectSelect.value }));
   debouncedSaveSettings();
+}
+
+// ── Paper picker ──────────────────────────────────────────────────────────────
+function getSelectedPapers() {
+  return [...chipGrid.querySelectorAll(".chip.active")].map((c) => c.dataset.paper);
 }
 
 function loadPaperSelection(subject) {
@@ -279,17 +342,12 @@ function loadPaperSelection(subject) {
     const raw = localStorage.getItem(paperSelKey(subject));
     if (raw) return JSON.parse(raw);
   } catch {}
-  return [...SUBJECT_PAPERS[subject]]; // default: all
+  return [...SUBJECT_PAPERS[subject]];
 }
 
 function savePaperSelection(subject, selected) {
   localStorage.setItem(paperSelKey(subject), JSON.stringify(selected));
   debouncedSaveSettings();
-}
-
-// ── Paper picker ──────────────────────────────────────────────────────────────
-function getSelectedPapers() {
-  return [...chipGrid.querySelectorAll(".chip.active")].map((c) => c.dataset.paper);
 }
 
 function buildChips(subject) {
@@ -328,13 +386,29 @@ pickNoneBtn.addEventListener("click", () => {
 // ── Summary ───────────────────────────────────────────────────────────────────
 function updateSummary() {
   const counts = STATUS_OPTIONS.reduce((a, v) => ({ ...a, [v]: 0 }), {});
-  tracker.querySelectorAll("select.status").forEach((s) => { counts[s.value] += 1; });
-  summary.innerHTML = STATUS_OPTIONS.map(
+  let total = 0;
+  tracker.querySelectorAll("select.status").forEach((s) => {
+    counts[s.value] += 1; total += 1;
+  });
+  const completed = counts["Done"] + counts["Done + Reviewed"];
+  const pct       = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+  const badges = STATUS_OPTIONS.map(
     (v) => `<span class="badge" data-status="${v}">${v} <strong>${counts[v]}</strong></span>`
   ).join("");
+
+  const bar = `
+    <div class="summary-progress">
+      <div class="summary-progress-track">
+        <div class="summary-progress-fill" style="width:${pct}%"></div>
+      </div>
+      <span class="summary-progress-label">${pct}% complete</span>
+    </div>`;
+
+  summary.innerHTML = badges + bar;
 }
 
-// ── Year progress ─────────────────────────────────────────────────────────────
+// ── Year card progress ────────────────────────────────────────────────────────
 function updateYearProgress(card) {
   const selects = card.querySelectorAll("select.status");
   const done    = [...selects].filter((s) => s.value === "Done" || s.value === "Done + Reviewed").length;
@@ -347,32 +421,30 @@ function updateYearProgress(card) {
 
 // ── Tracker builder ───────────────────────────────────────────────────────────
 function buildTracker() {
-  const raw     = Number.parseInt(yearsInput.value, 10);
-  const count   = Number.isNaN(raw) ? 1 : Math.min(Math.max(raw, 1), 12);
   const subject = subjectSelect.value;
   const papers  = getSelectedPapers();
   const saved   = loadStatus();
+  const years   = getYearsInRange();
 
   tracker.innerHTML = "";
 
-  if (!subject || !SUBJECT_PAPERS[subject]) {
+  if (!SUBJECT_PAPERS[subject]) {
     tracker.innerHTML = `<div class="empty-state">Please select a subject above.</div>`;
-    updateSummary();
-    return;
+    updateSummary(); return;
   }
-
   if (papers.length === 0) {
     tracker.innerHTML = `<div class="empty-state">No papers selected — pick at least one above to start tracking.</div>`;
-    updateSummary();
-    return;
+    updateSummary(); return;
   }
-
-  const years = Array.from({ length: count }, (_, i) => new Date().getFullYear() - i);
+  if (years.length === 0) {
+    tracker.innerHTML = `<div class="empty-state">Please select a valid year range.</div>`;
+    updateSummary(); return;
+  }
 
   years.forEach((year, idx) => {
     const card       = document.createElement("article");
     card.className   = "year-card";
-    card.style.animationDelay = `${idx * 0.07}s`;
+    card.style.animationDelay = `${idx * 0.06}s`;
 
     const header = document.createElement("div");
     header.className = "year-card-header";
@@ -432,7 +504,7 @@ function buildTracker() {
       sel.addEventListener("change", () => {
         sel.dataset.status = sel.value;
         saveStatusLocal();
-        saveStatusToCloud(sel.dataset.key, sel.value);
+        debouncedSaveStatus(sel.dataset.key, sel.value);
         updateSummary();
         updateYearProgress(card);
       });
@@ -441,39 +513,48 @@ function buildTracker() {
     updateYearProgress(card);
   });
 
-  saveSettings();
+  // Save this subject's range
+  saveYearRange(subject, parseInt(yearFromSel.value, 10), parseInt(yearToSel.value, 10));
+  saveActiveSubject();
   updateSummary();
 }
 
-// ── Subject/years change ──────────────────────────────────────────────────────
+// ── Subject change ────────────────────────────────────────────────────────────
 function onSubjectChange() {
-  buildChips(subjectSelect.value);
+  const subject = subjectSelect.value;
+  applyYearRange(subject);
+  buildChips(subject);
   buildTracker();
 }
 
-// ── App init — called once after cloud data is loaded ─────────────────────────
+// ── App init ──────────────────────────────────────────────────────────────────
 function initApp() {
-  // Populate subject dropdown only once
+  populateYearSelects();
+
   if (subjectSelect.children.length === 0) {
     Object.keys(SUBJECT_PAPERS).forEach((subj) => {
-      const opt       = document.createElement("option");
-      opt.value       = subj;
-      opt.textContent = subj;
+      const opt = document.createElement("option");
+      opt.value = subj; opt.textContent = subj;
       subjectSelect.appendChild(opt);
     });
-    subjectSelect.addEventListener("change", onSubjectChange);
-    yearsInput.addEventListener("change", buildTracker);
-    yearsInput.addEventListener("input",  buildTracker);
   }
 
-  // Restore last settings (cloud data already written to localStorage by loadAllFromCloud)
-  const s              = loadSettings();
-  const validSubjects  = Object.keys(SUBJECT_PAPERS);
-  const savedSubject   = s?.subject && SUBJECT_PAPERS[s.subject] ? s.subject : validSubjects[0];
-  const savedYears     = Number.parseInt(s?.years, 10);
+  // Restore last active subject
+  const s             = loadSettings();
+  const validSubjects = Object.keys(SUBJECT_PAPERS);
+  subjectSelect.value = (s?.subject && SUBJECT_PAPERS[s.subject]) ? s.subject : validSubjects[0];
 
-  subjectSelect.value = savedSubject;
-  yearsInput.value    = Number.isNaN(savedYears) ? 2 : Math.min(Math.max(savedYears, 1), 12);
+  // Wire events (only once)
+  subjectSelect.onchange = onSubjectChange;
+
+  yearFromSel.onchange = () => {
+    enforceRange();
+    buildTracker();
+  };
+  yearToSel.onchange = () => {
+    enforceRange();
+    buildTracker();
+  };
 
   onSubjectChange();
 }
