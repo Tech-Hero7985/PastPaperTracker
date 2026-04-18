@@ -1,23 +1,40 @@
+// ── Supabase ──────────────────────────────────────────────────────────────────
+const { createClient } = supabase;
+const sb = createClient(
+  "https://kymqjecvcnmpnjcxfpuv.supabase.co",
+  "sb_publishable_gtEiSZVEWFl_FAFFBG_XjQ_1MchKFyH"
+);
+
+let currentUser   = null;
+let settingsTimer = null;
+
 // ── Data ──────────────────────────────────────────────────────────────────────
-
 const SUBJECT_PAPERS = {
-  Mathematics: ["P1", "P2", "P3", "P4", "M1", "M2", "S1", "S2"],
-  Physics:     ["Unit 1", "Unit 2", "Unit 3", "Unit 4", "Unit 5", "Unit 6"],
-  Chemistry:   ["Unit 1", "Unit 2", "Unit 3", "Unit 4", "Unit 5", "Unit 6"],
-  Biology:     ["Unit 1", "Unit 2", "Unit 3", "Unit 4", "Unit 5", "Unit 6"],
+  Mathematics: ["P1","P2","P3","P4","M1","M2","S1","S2"],
+  Physics:     ["Unit 1","Unit 2","Unit 3","Unit 4","Unit 5","Unit 6"],
+  Chemistry:   ["Unit 1","Unit 2","Unit 3","Unit 4","Unit 5","Unit 6"],
+  Biology:     ["Unit 1","Unit 2","Unit 3","Unit 4","Unit 5","Unit 6"],
 };
-
-const SERIES = ["January", "May/June", "October/November"];
-const STATUS_OPTIONS = ["Not Done", "In Progress", "Done", "Done + Reviewed"];
+const SERIES         = ["January","May/June","October/November"];
+const STATUS_OPTIONS = ["Not Done","In Progress","Done","Done + Reviewed"];
 
 // ── Storage keys ──────────────────────────────────────────────────────────────
-
 const KEY_STATUS   = "ial-tracker-state";
 const KEY_SETTINGS = "ial-tracker-settings";
-const paperSelKey  = (subject) => `ial-tracker-papers__${subject}`;
+const paperSelKey  = (s) => `ial-tracker-papers__${s}`;
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
-
+const authOverlay   = document.getElementById("auth-overlay");
+const appEl         = document.getElementById("app");
+const loginForm     = document.getElementById("login-form");
+const signupForm    = document.getElementById("signup-form");
+const authError     = document.getElementById("auth-error");
+const authSuccess   = document.getElementById("auth-success");
+const loginBtn      = document.getElementById("login-btn");
+const signupBtn     = document.getElementById("signup-btn");
+const logoutBtn     = document.getElementById("logout-btn");
+const userEmailEl   = document.getElementById("user-email");
+const userAvatarEl  = document.getElementById("user-avatar");
 const subjectSelect = document.getElementById("subject");
 const yearsInput    = document.getElementById("years");
 const chipGrid      = document.getElementById("chip-grid");
@@ -26,20 +43,193 @@ const pickNoneBtn   = document.getElementById("pick-none");
 const tracker       = document.getElementById("tracker");
 const summary       = document.getElementById("summary");
 
-// ── Persistence helpers ───────────────────────────────────────────────────────
+// ── Sync toast ────────────────────────────────────────────────────────────────
+const toast = document.createElement("div");
+toast.className = "sync-toast";
+toast.innerHTML = `<span class="sync-dot"></span>Saving…`;
+document.body.appendChild(toast);
+let toastTimer;
+
+function showToast() {
+  clearTimeout(toastTimer);
+  toast.classList.add("visible");
+  toastTimer = setTimeout(() => toast.classList.remove("visible"), 1800);
+}
+
+// ── Auth UI ───────────────────────────────────────────────────────────────────
+
+document.querySelectorAll(".auth-tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".auth-tab").forEach((t) => t.classList.remove("active"));
+    tab.classList.add("active");
+    const which = tab.dataset.tab;
+    loginForm.style.display  = which === "login"  ? "flex" : "none";
+    signupForm.style.display = which === "signup" ? "flex" : "none";
+    hideAuthMsg();
+  });
+});
+
+function showAuthError(msg)   { authError.textContent = msg;   authError.style.display = "block";  authSuccess.style.display = "none"; }
+function showAuthSuccess(msg) { authSuccess.textContent = msg; authSuccess.style.display = "block"; authError.style.display   = "none"; }
+function hideAuthMsg()        { authError.style.display = "none"; authSuccess.style.display = "none"; }
+
+function setBtnLoading(btn, loading, defaultText) {
+  btn.disabled    = loading;
+  btn.textContent = loading ? "Please wait…" : defaultText;
+}
+
+loginBtn.addEventListener("click", async () => {
+  const email    = document.getElementById("login-email").value.trim();
+  const password = document.getElementById("login-password").value;
+  if (!email || !password) return showAuthError("Please fill in all fields.");
+  setBtnLoading(loginBtn, true, "Log In");
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  setBtnLoading(loginBtn, false, "Log In");
+  if (error) showAuthError(error.message);
+});
+
+// Allow Enter key in login fields
+["login-email","login-password"].forEach((id) => {
+  document.getElementById(id).addEventListener("keydown", (e) => {
+    if (e.key === "Enter") loginBtn.click();
+  });
+});
+
+signupBtn.addEventListener("click", async () => {
+  const email    = document.getElementById("signup-email").value.trim();
+  const password = document.getElementById("signup-password").value;
+  if (!email || !password) return showAuthError("Please fill in all fields.");
+  if (password.length < 6)  return showAuthError("Password must be at least 6 characters.");
+  setBtnLoading(signupBtn, true, "Create Free Account");
+  const { error } = await sb.auth.signUp({ email, password });
+  setBtnLoading(signupBtn, false, "Create Free Account");
+  if (error) showAuthError(error.message);
+  else       showAuthSuccess("Account created! You can now log in.");
+});
+
+logoutBtn.addEventListener("click", async () => {
+  await sb.auth.signOut();
+  localStorage.removeItem(KEY_STATUS);
+  localStorage.removeItem(KEY_SETTINGS);
+  Object.keys(SUBJECT_PAPERS).forEach((s) => localStorage.removeItem(paperSelKey(s)));
+});
+
+// ── App show/hide ─────────────────────────────────────────────────────────────
+
+function showApp() {
+  authOverlay.style.display = "none";
+  appEl.style.display       = "block";
+}
+
+function showAuth() {
+  authOverlay.style.display = "flex";
+  appEl.style.display       = "none";
+}
+
+// ── Auth state listener ───────────────────────────────────────────────────────
+
+sb.auth.onAuthStateChange(async (event, session) => {
+  if (session?.user) {
+    currentUser = session.user;
+    // Set avatar initial + email
+    userEmailEl.textContent  = currentUser.email;
+    userAvatarEl.textContent = currentUser.email[0].toUpperCase();
+    showApp();
+    await loadAllFromCloud();
+    initApp();
+  } else {
+    currentUser = null;
+    showAuth();
+    tracker.innerHTML = "";
+    summary.innerHTML = "";
+  }
+});
+
+// ── Cloud: load all data into localStorage ────────────────────────────────────
+
+async function loadAllFromCloud() {
+  // Load paper statuses
+  const { data: statuses } = await sb.from("paper_status").select("*");
+  if (statuses) {
+    const state = {};
+    statuses.forEach((row) => {
+      state[`${row.subject}__${row.year}__${row.series}__${row.paper}`] = row.status;
+    });
+    localStorage.setItem(KEY_STATUS, JSON.stringify(state));
+  }
+
+  // Load settings + paper selections
+  const { data: settings } = await sb
+    .from("user_settings")
+    .select("*")
+    .eq("user_id", currentUser.id)
+    .maybeSingle();
+
+  if (settings) {
+    localStorage.setItem(KEY_SETTINGS, JSON.stringify({
+      subject: settings.subject,
+      years:   settings.years,
+    }));
+    if (settings.paper_selections) {
+      Object.entries(settings.paper_selections).forEach(([subj, papers]) => {
+        localStorage.setItem(paperSelKey(subj), JSON.stringify(papers));
+      });
+    }
+  }
+}
+
+// ── Cloud: save a single status change ───────────────────────────────────────
+
+async function saveStatusToCloud(key, status) {
+  if (!currentUser) return;
+  showToast();
+  const [subject, year, series, paper] = key.split("__");
+  await sb.from("paper_status").upsert({
+    user_id: currentUser.id,
+    subject,
+    year:    parseInt(year),
+    series,
+    paper,
+    status,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "user_id,subject,year,series,paper" });
+}
+
+// ── Cloud: save settings (debounced) ─────────────────────────────────────────
+
+async function saveSettingsToCloud() {
+  if (!currentUser) return;
+  const paperSelections = {};
+  Object.keys(SUBJECT_PAPERS).forEach((subj) => {
+    const raw = localStorage.getItem(paperSelKey(subj));
+    if (raw) try { paperSelections[subj] = JSON.parse(raw); } catch {}
+  });
+  const s = loadSettings();
+  await sb.from("user_settings").upsert({
+    user_id:          currentUser.id,
+    subject:          s?.subject || subjectSelect.value,
+    years:            parseInt(s?.years || yearsInput.value),
+    paper_selections: paperSelections,
+    updated_at:       new Date().toISOString(),
+  }, { onConflict: "user_id" });
+}
+
+function debouncedSaveSettings() {
+  clearTimeout(settingsTimer);
+  settingsTimer = setTimeout(saveSettingsToCloud, 1200);
+}
+
+// ── localStorage helpers ──────────────────────────────────────────────────────
 
 function loadStatus() {
   try { return JSON.parse(localStorage.getItem(KEY_STATUS)) || {}; }
   catch { return {}; }
 }
 
-function saveStatus() {
-  const state = {};
-  tracker.querySelectorAll("select.status").forEach((s) => {
-    state[s.dataset.key] = s.value;
-  });
-  // Merge with existing (so other subjects aren't wiped)
+function saveStatusLocal() {
+  const state    = {};
   const existing = loadStatus();
+  tracker.querySelectorAll("select.status").forEach((s) => { state[s.dataset.key] = s.value; });
   localStorage.setItem(KEY_STATUS, JSON.stringify({ ...existing, ...state }));
 }
 
@@ -53,20 +243,20 @@ function saveSettings() {
     subject: subjectSelect.value,
     years:   yearsInput.value,
   }));
+  debouncedSaveSettings();
 }
 
-/** Returns the saved paper selection for a subject, defaulting to ALL papers */
 function loadPaperSelection(subject) {
   try {
     const raw = localStorage.getItem(paperSelKey(subject));
     if (raw) return JSON.parse(raw);
-  } catch { /* ignore */ }
-  // Default: all papers selected
+  } catch {}
   return [...SUBJECT_PAPERS[subject]];
 }
 
 function savePaperSelection(subject, selected) {
   localStorage.setItem(paperSelKey(subject), JSON.stringify(selected));
+  debouncedSaveSettings();
 }
 
 // ── Paper picker ──────────────────────────────────────────────────────────────
@@ -76,25 +266,19 @@ function getSelectedPapers() {
 }
 
 function buildChips(subject) {
-  const allPapers = SUBJECT_PAPERS[subject];
-  const saved     = loadPaperSelection(subject);
-
+  const saved = loadPaperSelection(subject);
   chipGrid.innerHTML = "";
-
-  allPapers.forEach((paper) => {
-    const chip = document.createElement("button");
-    chip.type          = "button";
-    chip.className     = "chip" + (saved.includes(paper) ? " active" : "");
+  SUBJECT_PAPERS[subject].forEach((paper) => {
+    const chip       = document.createElement("button");
+    chip.type        = "button";
+    chip.className   = "chip" + (saved.includes(paper) ? " active" : "");
     chip.dataset.paper = paper;
-    chip.innerHTML     = `<span class="chip-check">✓</span>${paper}`;
-
+    chip.innerHTML   = `<span class="chip-check">✓</span>${paper}`;
     chip.addEventListener("click", () => {
       chip.classList.toggle("active");
-      const sel = getSelectedPapers();
-      savePaperSelection(subject, sel);
+      savePaperSelection(subject, getSelectedPapers());
       buildTracker();
     });
-
     chipGrid.appendChild(chip);
   });
 }
@@ -117,29 +301,25 @@ pickNoneBtn.addEventListener("click", () => {
 
 function updateSummary() {
   const counts = STATUS_OPTIONS.reduce((a, v) => ({ ...a, [v]: 0 }), {});
-  tracker.querySelectorAll("select.status").forEach((s) => {
-    counts[s.value] += 1;
-  });
+  tracker.querySelectorAll("select.status").forEach((s) => { counts[s.value] += 1; });
   summary.innerHTML = STATUS_OPTIONS.map(
     (v) => `<span class="badge" data-status="${v}">${v} <strong>${counts[v]}</strong></span>`
   ).join("");
 }
 
-// ── Year card progress ────────────────────────────────────────────────────────
+// ── Year progress ─────────────────────────────────────────────────────────────
 
 function updateYearProgress(card) {
   const selects = card.querySelectorAll("select.status");
-  const done    = [...selects].filter(
-    (s) => s.value === "Done" || s.value === "Done + Reviewed"
-  ).length;
-  const pct   = selects.length ? Math.round((done / selects.length) * 100) : 0;
-  const fill  = card.querySelector(".year-progress-fill");
-  const label = card.querySelector(".year-progress-label");
+  const done    = [...selects].filter((s) => s.value === "Done" || s.value === "Done + Reviewed").length;
+  const pct     = selects.length ? Math.round((done / selects.length) * 100) : 0;
+  const fill    = card.querySelector(".year-progress-fill");
+  const label   = card.querySelector(".year-progress-label");
   if (fill)  fill.style.width  = pct + "%";
   if (label) label.textContent = `${done}/${selects.length} done`;
 }
 
-// ── Main tracker builder ──────────────────────────────────────────────────────
+// ── Tracker builder ───────────────────────────────────────────────────────────
 
 function buildTracker() {
   const raw     = Number.parseInt(yearsInput.value, 10);
@@ -158,10 +338,10 @@ function buildTracker() {
 
   const years = Array.from({ length: count }, (_, i) => new Date().getFullYear() - i);
 
-  years.forEach((year, cardIdx) => {
-    const card = document.createElement("article");
-    card.className = "year-card";
-    card.style.animationDelay = `${cardIdx * 0.07}s`;
+  years.forEach((year, idx) => {
+    const card       = document.createElement("article");
+    card.className   = "year-card";
+    card.style.animationDelay = `${idx * 0.07}s`;
 
     // Header
     const header = document.createElement("div");
@@ -174,44 +354,36 @@ function buildTracker() {
       </div>`;
     card.appendChild(header);
 
-    // Series columns
-    const body = document.createElement("div");
+    // Body
+    const body     = document.createElement("div");
     body.className = "year-body";
 
     SERIES.forEach((seriesName) => {
-      const section = document.createElement("section");
-      section.className = "series";
+      const section          = document.createElement("section");
+      section.className      = "series";
       section.dataset.series = seriesName;
-
-      // Visible series header
-      section.innerHTML = `
+      section.innerHTML      = `
         <div class="series-header">
           <span class="series-dot"></span>
           <span class="series-name">${seriesName}</span>
         </div>`;
 
-      const wrap  = document.createElement("div");
+      const wrap     = document.createElement("div");
       wrap.className = "series-table-wrap";
-
-      const table = document.createElement("table");
-      const tbody = document.createElement("tbody");
+      const table    = document.createElement("table");
+      const tbody    = document.createElement("tbody");
 
       papers.forEach((paper) => {
         const key   = `${subject}__${year}__${seriesName}__${paper}`;
         const value = saved[key] || "Not Done";
-
-        const tr = document.createElement("tr");
+        const tr    = document.createElement("tr");
         tr.innerHTML = `
           <td class="paper-name">${paper}</td>
           <td class="status-cell">
-            <select
-              class="status"
-              data-key="${key}"
-              data-status="${value}"
-              aria-label="${year} ${seriesName} ${paper} status"
-            >
-              ${STATUS_OPTIONS.map(
-                (s) => `<option value="${s}"${s === value ? " selected" : ""}>${s}</option>`
+            <select class="status" data-key="${key}" data-status="${value}"
+              aria-label="${year} ${seriesName} ${paper} status">
+              ${STATUS_OPTIONS.map((s) =>
+                `<option value="${s}"${s === value ? " selected" : ""}>${s}</option>`
               ).join("")}
             </select>
           </td>`;
@@ -231,7 +403,8 @@ function buildTracker() {
     card.querySelectorAll("select.status").forEach((sel) => {
       sel.addEventListener("change", () => {
         sel.dataset.status = sel.value;
-        saveStatus();
+        saveStatusLocal();
+        saveStatusToCloud(sel.dataset.key, sel.value);
         updateSummary();
         updateYearProgress(card);
       });
@@ -244,37 +417,31 @@ function buildTracker() {
   updateSummary();
 }
 
-// ── Subject change: rebuild chips + tracker ───────────────────────────────────
+// ── Subject change ────────────────────────────────────────────────────────────
 
 function onSubjectChange() {
   buildChips(subjectSelect.value);
   buildTracker();
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
+// ── App init ──────────────────────────────────────────────────────────────────
 
-// Populate subject dropdown
-Object.keys(SUBJECT_PAPERS).forEach((subject) => {
-  const opt = document.createElement("option");
-  opt.value = subject;
-  opt.textContent = subject;
-  subjectSelect.appendChild(opt);
-});
+function initApp() {
+  if (subjectSelect.children.length === 0) {
+    Object.keys(SUBJECT_PAPERS).forEach((subj) => {
+      const opt       = document.createElement("option");
+      opt.value       = subj;
+      opt.textContent = subj;
+      subjectSelect.appendChild(opt);
+    });
+    subjectSelect.addEventListener("change", onSubjectChange);
+    yearsInput.addEventListener("change", buildTracker);
+    yearsInput.addEventListener("input",  buildTracker);
+  }
 
-// Restore last settings
-const settings = loadSettings();
-if (settings) {
-  if (settings.subject && SUBJECT_PAPERS[settings.subject]) {
-    subjectSelect.value = settings.subject;
-  }
-  if (settings.years) {
-    yearsInput.value = settings.years;
-  }
+  const s = loadSettings();
+  if (s?.subject && SUBJECT_PAPERS[s.subject]) subjectSelect.value = s.subject;
+  if (s?.years)                                yearsInput.value    = s.years;
+
+  onSubjectChange();
 }
-
-subjectSelect.addEventListener("change", onSubjectChange);
-yearsInput.addEventListener("change", buildTracker);
-yearsInput.addEventListener("input",  buildTracker);
-
-// First render
-onSubjectChange();
