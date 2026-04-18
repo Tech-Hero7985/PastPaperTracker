@@ -9,6 +9,7 @@ let currentUser = null;
 let settingsTimer = null;
 let statusSaveTimer = null;
 let initializedForUserId = null;
+let appBootstrapped = false;
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 const SUBJECT_PAPERS = {
@@ -102,7 +103,6 @@ loginBtn.addEventListener("click", async () => {
   if (error) showAuthError(error.message);
 });
 
-// Allow Enter key in login fields
 ["login-email", "login-password"].forEach((id) => {
   document.getElementById(id).addEventListener("keydown", (e) => {
     if (e.key === "Enter") loginBtn.click();
@@ -135,46 +135,62 @@ function showApp() {
   authOverlay.style.display = "none";
   appEl.style.display = "block";
 }
-
 function showAuth() {
   authOverlay.style.display = "flex";
   appEl.style.display = "none";
 }
 
-// ── Auth state listener ───────────────────────────────────────────────────────
-sb.auth.onAuthStateChange(async (event, session) => {
-  if (session?.user) {
-    currentUser = session.user;
+// ── Auth session handlers ─────────────────────────────────────────────────────
+async function handleSignedInUser(user, event = "INITIAL") {
+  currentUser = user;
 
-    // Avoid repeated full init on token refresh/user update events for same user
-    if (initializedForUserId === currentUser.id && event !== "SIGNED_IN") {
-      return;
-    }
-    initializedForUserId = currentUser.id;
-
-    userEmailEl.textContent = currentUser.email || "";
-    userAvatarEl.textContent = (currentUser.email?.[0] || "U").toUpperCase();
-
-    showApp();
-    await loadAllFromCloud();
-    initApp();
-  } else {
-    currentUser = null;
-    initializedForUserId = null;
-    showAuth();
-    tracker.innerHTML = "";
-    summary.innerHTML = "";
+  if (initializedForUserId === currentUser.id && appBootstrapped && event !== "SIGNED_IN") {
+    return;
   }
+
+  initializedForUserId = currentUser.id;
+  userEmailEl.textContent = currentUser.email || "";
+  userAvatarEl.textContent = (currentUser.email?.[0] || "U").toUpperCase();
+
+  showApp();
+  await loadAllFromCloud();
+  initApp();
+  appBootstrapped = true;
+}
+
+function handleSignedOutUser() {
+  currentUser = null;
+  initializedForUserId = null;
+  appBootstrapped = false;
+  showAuth();
+  tracker.innerHTML = "";
+  summary.innerHTML = "";
+}
+
+// 1) Bootstrap from persisted session
+(async function bootstrapAuth() {
+  const { data, error } = await sb.auth.getSession();
+  if (error) {
+    console.error("getSession error:", error);
+    handleSignedOutUser();
+    return;
+  }
+
+  const user = data?.session?.user;
+  if (user) await handleSignedInUser(user, "INITIAL");
+  else handleSignedOutUser();
+})();
+
+// 2) Future auth changes
+sb.auth.onAuthStateChange(async (event, session) => {
+  if (session?.user) await handleSignedInUser(session.user, event);
+  else handleSignedOutUser();
 });
 
-// ── Cloud: load all data into localStorage ───────────────���────────────────────
+// ── Cloud: load all data into localStorage ────────────────────────────────────
 async function loadAllFromCloud() {
-  // Load paper statuses
   const { data: statuses, error: statusErr } = await sb.from("paper_status").select("*");
-
-  if (statusErr) {
-    console.error("loadAllFromCloud paper_status error:", statusErr);
-  }
+  if (statusErr) console.error("loadAllFromCloud paper_status error:", statusErr);
 
   if (statuses) {
     const state = {};
@@ -184,16 +200,13 @@ async function loadAllFromCloud() {
     localStorage.setItem(KEY_STATUS, JSON.stringify(state));
   }
 
-  // Load settings + paper selections
   const { data: settings, error: settingsErr } = await sb
     .from("user_settings")
     .select("*")
     .eq("user_id", currentUser.id)
     .maybeSingle();
 
-  if (settingsErr) {
-    console.error("loadAllFromCloud user_settings error:", settingsErr);
-  }
+  if (settingsErr) console.error("loadAllFromCloud user_settings error:", settingsErr);
 
   if (settings) {
     localStorage.setItem(
@@ -212,13 +225,12 @@ async function loadAllFromCloud() {
   }
 }
 
-// ── Cloud: save a single status change ──���────────────────────────────────────
+// ── Cloud: save status ────────────────────────────────────────────────────────
 async function saveStatusToCloud(key, status) {
   if (!currentUser) return;
   showToast();
 
   const [subject, year, series, paper] = key.split("__");
-
   const { error } = await sb.from("paper_status").upsert(
     {
       user_id: currentUser.id,
@@ -232,9 +244,7 @@ async function saveStatusToCloud(key, status) {
     { onConflict: "user_id,subject,year,series,paper" }
   );
 
-  if (error) {
-    console.error("saveStatusToCloud error:", error);
-  }
+  if (error) console.error("saveStatusToCloud error:", error);
 }
 
 function debouncedSaveStatus(key, status) {
@@ -242,7 +252,7 @@ function debouncedSaveStatus(key, status) {
   statusSaveTimer = setTimeout(() => saveStatusToCloud(key, status), 250);
 }
 
-// ── Cloud: save settings (debounced) ─────────────────────────────────────────
+// ── Cloud: save settings ──────────────────────────────────────────────────────
 async function saveSettingsToCloud() {
   if (!currentUser) return;
 
@@ -257,7 +267,6 @@ async function saveSettingsToCloud() {
   });
 
   const s = loadSettings();
-
   const { error } = await sb.from("user_settings").upsert(
     {
       user_id: currentUser.id,
@@ -269,9 +278,7 @@ async function saveSettingsToCloud() {
     { onConflict: "user_id" }
   );
 
-  if (error) {
-    console.error("saveSettingsToCloud error:", error);
-  }
+  if (error) console.error("saveSettingsToCloud error:", error);
 }
 
 function debouncedSaveSettings() {
@@ -390,13 +397,11 @@ function updateSummary() {
 // ── Year progress ─────────────────────────────────────────────────────────────
 function updateYearProgress(card) {
   const selects = card.querySelectorAll("select.status");
-  const done = [...selects].filter(
-    (s) => s.value === "Done" || s.value === "Done + Reviewed"
-  ).length;
+  const done = [...selects].filter((s) => s.value === "Done" || s.value === "Done + Reviewed").length;
   const pct = selects.length ? Math.round((done / selects.length) * 100) : 0;
+
   const fill = card.querySelector(".year-progress-fill");
   const label = card.querySelector(".year-progress-label");
-
   if (fill) fill.style.width = pct + "%";
   if (label) label.textContent = `${done}/${selects.length} done`;
 }
@@ -430,7 +435,6 @@ function buildTracker() {
     card.className = "year-card";
     card.style.animationDelay = `${idx * 0.07}s`;
 
-    // Header
     const header = document.createElement("div");
     header.className = "year-card-header";
     header.innerHTML = `
@@ -441,7 +445,6 @@ function buildTracker() {
       </div>`;
     card.appendChild(header);
 
-    // Body
     const body = document.createElement("div");
     body.className = "year-body";
 
@@ -467,8 +470,7 @@ function buildTracker() {
         tr.innerHTML = `
           <td class="paper-name">${paper}</td>
           <td class="status-cell">
-            <select class="status" data-key="${key}" data-status="${value}"
-              aria-label="${year} ${seriesName} ${paper} status">
+            <select class="status" data-key="${key}" data-status="${value}" aria-label="${year} ${seriesName} ${paper} status">
               ${STATUS_OPTIONS.map(
                 (s) => `<option value="${s}"${s === value ? " selected" : ""}>${s}</option>`
               ).join("")}
@@ -486,7 +488,6 @@ function buildTracker() {
     card.appendChild(body);
     tracker.appendChild(card);
 
-    // Events
     card.querySelectorAll("select.status").forEach((sel) => {
       sel.addEventListener("change", () => {
         sel.dataset.status = sel.value;
@@ -526,8 +527,6 @@ function initApp() {
   }
 
   const s = loadSettings();
-
-  // Always force a valid subject
   const validSubjects = Object.keys(SUBJECT_PAPERS);
   const fallbackSubject = validSubjects[0];
 
@@ -537,12 +536,10 @@ function initApp() {
     subjectSelect.value = fallbackSubject;
   }
 
-  // If browser didn't apply value for any reason, force fallback again
   if (!subjectSelect.value || !SUBJECT_PAPERS[subjectSelect.value]) {
     subjectSelect.value = fallbackSubject;
   }
 
-  // Clamp years to safe range
   const parsedYears = Number.parseInt(s?.years ?? yearsInput.value, 10);
   yearsInput.value = Number.isNaN(parsedYears) ? 2 : Math.min(Math.max(parsedYears, 1), 12);
 
