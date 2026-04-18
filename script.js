@@ -1,12 +1,13 @@
-// ── Supabase ──────────────────────────────────────────────────────────────────
+
+// Force login on every page load — wipe the persisted session BEFORE
+// the Supabase client initialises so INITIAL_SESSION always fires with no user.
+localStorage.removeItem("sb-kymqjecvcnmpnjcxfpuv-auth-token");
+
 const { createClient } = supabase;
 const sb = createClient(
   "https://kymqjecvcnmpnjcxfpuv.supabase.co",
   "sb_publishable_gtEiSZVEWFl_FAFFBG_XjQ_1MchKFyH"
 );
-
-// Sign out on every page load so the user always starts fresh from the login screen
-sb.auth.signOut();
 
 let currentUser    = null;
 let settingsTimer  = null;
