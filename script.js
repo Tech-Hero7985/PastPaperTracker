@@ -25,7 +25,7 @@ const KEY_STATUS = "ial-tracker-state";
 const KEY_SETTINGS = "ial-tracker-settings";
 const paperSelKey = (s) => `ial-tracker-papers__${s}`;
 
-// ── DOM refs ───────────────────────────��──────────────────────────────────────
+// ── DOM refs ──────────────────────────────────────────────────────────────────
 const authOverlay = document.getElementById("auth-overlay");
 const appEl = document.getElementById("app");
 const loginForm = document.getElementById("login-form");
@@ -61,9 +61,7 @@ function showToast() {
 // ── Auth UI ───────────────────────────────────────────────────────────────────
 document.querySelectorAll(".auth-tab").forEach((tab) => {
   tab.addEventListener("click", () => {
-    document
-      .querySelectorAll(".auth-tab")
-      .forEach((t) => t.classList.remove("active"));
+    document.querySelectorAll(".auth-tab").forEach((t) => t.classList.remove("active"));
     tab.classList.add("active");
     const which = tab.dataset.tab;
     loginForm.style.display = which === "login" ? "flex" : "none";
@@ -115,8 +113,7 @@ signupBtn.addEventListener("click", async () => {
   const email = document.getElementById("signup-email").value.trim();
   const password = document.getElementById("signup-password").value;
   if (!email || !password) return showAuthError("Please fill in all fields.");
-  if (password.length < 6)
-    return showAuthError("Password must be at least 6 characters.");
+  if (password.length < 6) return showAuthError("Password must be at least 6 characters.");
 
   setBtnLoading(signupBtn, true, "Create Free Account");
   const { error } = await sb.auth.signUp({ email, password });
@@ -130,9 +127,7 @@ logoutBtn.addEventListener("click", async () => {
   await sb.auth.signOut();
   localStorage.removeItem(KEY_STATUS);
   localStorage.removeItem(KEY_SETTINGS);
-  Object.keys(SUBJECT_PAPERS).forEach((s) =>
-    localStorage.removeItem(paperSelKey(s))
-  );
+  Object.keys(SUBJECT_PAPERS).forEach((s) => localStorage.removeItem(paperSelKey(s)));
 });
 
 // ── App show/hide ─────────────────────────────────────────────────────────────
@@ -157,8 +152,8 @@ sb.auth.onAuthStateChange(async (event, session) => {
     }
     initializedForUserId = currentUser.id;
 
-    userEmailEl.textContent = currentUser.email;
-    userAvatarEl.textContent = currentUser.email[0].toUpperCase();
+    userEmailEl.textContent = currentUser.email || "";
+    userAvatarEl.textContent = (currentUser.email?.[0] || "U").toUpperCase();
 
     showApp();
     await loadAllFromCloud();
@@ -172,12 +167,10 @@ sb.auth.onAuthStateChange(async (event, session) => {
   }
 });
 
-// ── Cloud: load all data into localStorage ────────────────────────────────────
+// ── Cloud: load all data into localStorage ───────────────���────────────────────
 async function loadAllFromCloud() {
   // Load paper statuses
-  const { data: statuses, error: statusErr } = await sb
-    .from("paper_status")
-    .select("*");
+  const { data: statuses, error: statusErr } = await sb.from("paper_status").select("*");
 
   if (statusErr) {
     console.error("loadAllFromCloud paper_status error:", statusErr);
@@ -186,8 +179,7 @@ async function loadAllFromCloud() {
   if (statuses) {
     const state = {};
     statuses.forEach((row) => {
-      state[`${row.subject}__${row.year}__${row.series}__${row.paper}`] =
-        row.status;
+      state[`${row.subject}__${row.year}__${row.series}__${row.paper}`] = row.status;
     });
     localStorage.setItem(KEY_STATUS, JSON.stringify(state));
   }
@@ -220,7 +212,7 @@ async function loadAllFromCloud() {
   }
 }
 
-// ── Cloud: save a single status change ───────────────────────────────────────
+// ── Cloud: save a single status change ──���────────────────────────────────────
 async function saveStatusToCloud(key, status) {
   if (!currentUser) return;
   showToast();
@@ -257,10 +249,11 @@ async function saveSettingsToCloud() {
   const paperSelections = {};
   Object.keys(SUBJECT_PAPERS).forEach((subj) => {
     const raw = localStorage.getItem(paperSelKey(subj));
-    if (raw)
+    if (raw) {
       try {
         paperSelections[subj] = JSON.parse(raw);
       } catch {}
+    }
   });
 
   const s = loadSettings();
@@ -298,9 +291,9 @@ function loadStatus() {
 function saveStatusLocal() {
   const state = {};
   const existing = loadStatus();
-  tracker
-    .querySelectorAll("select.status")
-    .forEach((s) => (state[s.dataset.key] = s.value));
+  tracker.querySelectorAll("select.status").forEach((s) => {
+    state[s.dataset.key] = s.value;
+  });
   localStorage.setItem(KEY_STATUS, JSON.stringify({ ...existing, ...state }));
 }
 
@@ -338,12 +331,16 @@ function savePaperSelection(subject, selected) {
 
 // ── Paper picker ──────────────────────────────────────────────────────────────
 function getSelectedPapers() {
-  return [...chipGrid.querySelectorAll(".chip.active")].map(
-    (c) => c.dataset.paper
-  );
+  return [...chipGrid.querySelectorAll(".chip.active")].map((c) => c.dataset.paper);
 }
 
 function buildChips(subject) {
+  if (!SUBJECT_PAPERS[subject]) {
+    chipGrid.innerHTML = "";
+    console.warn("Invalid subject in buildChips:", subject);
+    return;
+  }
+
   const saved = loadPaperSelection(subject);
   chipGrid.innerHTML = "";
 
@@ -386,8 +383,7 @@ function updateSummary() {
   });
 
   summary.innerHTML = STATUS_OPTIONS.map(
-    (v) =>
-      `<span class="badge" data-status="${v}">${v} <strong>${counts[v]}</strong></span>`
+    (v) => `<span class="badge" data-status="${v}">${v} <strong>${counts[v]}</strong></span>`
   ).join("");
 }
 
@@ -405,7 +401,7 @@ function updateYearProgress(card) {
   if (label) label.textContent = `${done}/${selects.length} done`;
 }
 
-// ── Tracker builder ────────────────────────────��──────────────────────────────
+// ── Tracker builder ───────────────────────────────────────────────────────────
 function buildTracker() {
   const raw = Number.parseInt(yearsInput.value, 10);
   const count = Number.isNaN(raw) ? 1 : Math.min(Math.max(raw, 1), 12);
@@ -415,16 +411,19 @@ function buildTracker() {
 
   tracker.innerHTML = "";
 
+  if (!SUBJECT_PAPERS[subject]) {
+    tracker.innerHTML = `<div class="empty-state">Invalid subject. Please reselect a subject.</div>`;
+    updateSummary();
+    return;
+  }
+
   if (papers.length === 0) {
     tracker.innerHTML = `<div class="empty-state">No papers selected — pick at least one above to start tracking.</div>`;
     updateSummary();
     return;
   }
 
-  const years = Array.from(
-    { length: count },
-    (_, i) => new Date().getFullYear() - i
-  );
+  const years = Array.from({ length: count }, (_, i) => new Date().getFullYear() - i);
 
   years.forEach((year, idx) => {
     const card = document.createElement("article");
@@ -471,8 +470,7 @@ function buildTracker() {
             <select class="status" data-key="${key}" data-status="${value}"
               aria-label="${year} ${seriesName} ${paper} status">
               ${STATUS_OPTIONS.map(
-                (s) =>
-                  `<option value="${s}"${s === value ? " selected" : ""}>${s}</option>`
+                (s) => `<option value="${s}"${s === value ? " selected" : ""}>${s}</option>`
               ).join("")}
             </select>
           </td>`;
@@ -528,8 +526,25 @@ function initApp() {
   }
 
   const s = loadSettings();
-  if (s?.subject && SUBJECT_PAPERS[s.subject]) subjectSelect.value = s.subject;
-  if (s?.years) yearsInput.value = s.years;
+
+  // Always force a valid subject
+  const validSubjects = Object.keys(SUBJECT_PAPERS);
+  const fallbackSubject = validSubjects[0];
+
+  if (s?.subject && SUBJECT_PAPERS[s.subject]) {
+    subjectSelect.value = s.subject;
+  } else {
+    subjectSelect.value = fallbackSubject;
+  }
+
+  // If browser didn't apply value for any reason, force fallback again
+  if (!subjectSelect.value || !SUBJECT_PAPERS[subjectSelect.value]) {
+    subjectSelect.value = fallbackSubject;
+  }
+
+  // Clamp years to safe range
+  const parsedYears = Number.parseInt(s?.years ?? yearsInput.value, 10);
+  yearsInput.value = Number.isNaN(parsedYears) ? 2 : Math.min(Math.max(parsedYears, 1), 12);
 
   onSubjectChange();
 }
