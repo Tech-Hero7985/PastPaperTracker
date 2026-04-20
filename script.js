@@ -23,37 +23,44 @@ const SUBJECT_PAPERS = {
 };
 const SERIES         = ["January","May/June","October/November"];
 const STATUS_OPTIONS = ["Not Done","In Progress","Done","Done + Reviewed"];
-
-const THIS_YEAR  = new Date().getFullYear();
-const MIN_YEAR   = 2010;
-const MAX_YEAR   = THIS_YEAR;
+const THIS_YEAR      = new Date().getFullYear();
+const MIN_YEAR       = 2010;
 
 // ── Storage keys ──────────────────────────────────────────────────────────────
 const KEY_STATUS   = "ial-tracker-state";
 const KEY_SETTINGS = "ial-tracker-settings";
 const paperSelKey  = (s) => `ial-tracker-papers__${s}`;
-const yearRangeKey = (s) => `ial-tracker-yearrange__${s}`;
+const yearsSelKey  = (s) => `ial-tracker-yearslist__${s}`;
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
-const authOverlay   = document.getElementById("auth-overlay");
-const appEl         = document.getElementById("app");
-const loginForm     = document.getElementById("login-form");
-const signupForm    = document.getElementById("signup-form");
-const authError     = document.getElementById("auth-error");
-const authSuccess   = document.getElementById("auth-success");
-const loginBtn      = document.getElementById("login-btn");
-const signupBtn     = document.getElementById("signup-btn");
-const logoutBtn     = document.getElementById("logout-btn");
-const userEmailEl   = document.getElementById("user-email");
-const userAvatarEl  = document.getElementById("user-avatar");
-const subjectSelect = document.getElementById("subject");
-const yearFromSel   = document.getElementById("year-from");
-const yearToSel     = document.getElementById("year-to");
-const chipGrid      = document.getElementById("chip-grid");
-const pickAllBtn    = document.getElementById("pick-all");
-const pickNoneBtn   = document.getElementById("pick-none");
-const tracker       = document.getElementById("tracker");
-const summary       = document.getElementById("summary");
+const authOverlay     = document.getElementById("auth-overlay");
+const appEl           = document.getElementById("app");
+const loginForm       = document.getElementById("login-form");
+const signupForm      = document.getElementById("signup-form");
+const authError       = document.getElementById("auth-error");
+const authSuccess     = document.getElementById("auth-success");
+const loginBtn        = document.getElementById("login-btn");
+const signupBtn       = document.getElementById("signup-btn");
+const logoutBtn       = document.getElementById("logout-btn");
+const userEmailEl     = document.getElementById("user-email");
+const userAvatarEl    = document.getElementById("user-avatar");
+const subjectSelect   = document.getElementById("subject");
+const yearPickerBtn   = document.getElementById("year-picker-btn");
+const yearPickerPanel = document.getElementById("year-picker-panel");
+const yearPickerLabel = document.getElementById("year-picker-label");
+const yearChecklist   = document.getElementById("year-checklist");
+const yearPickAll     = document.getElementById("year-pick-all");
+const yearPickNone    = document.getElementById("year-pick-none");
+const chipGrid        = document.getElementById("chip-grid");
+const pickAllBtn      = document.getElementById("pick-all");
+const pickNoneBtn     = document.getElementById("pick-none");
+const tracker         = document.getElementById("tracker");
+const summary         = document.getElementById("summary");
+const paperCounterVal = document.getElementById("paper-counter-val");
+const lbBtn           = document.getElementById("lb-btn");
+const lbOverlay       = document.getElementById("lb-overlay");
+const lbClose         = document.getElementById("lb-close");
+const lbList          = document.getElementById("lb-list");
 
 // ── Sync toast ────────────────────────────────────────────────────────────────
 const toast = document.createElement("div");
@@ -67,64 +74,99 @@ function showToast() {
   toastTimer = setTimeout(() => toast.classList.remove("visible"), 1800);
 }
 
-// ── Populate year dropdowns ───────────────────────────────────────────────────
-function populateYearSelects() {
-  const years = [];
-  for (let y = MAX_YEAR; y >= MIN_YEAR; y--) years.push(y);
-  [yearFromSel, yearToSel].forEach((sel) => {
-    sel.innerHTML = "";
-    years.forEach((y) => {
-      const opt = document.createElement("option");
-      opt.value = y;
-      opt.textContent = y;
-      sel.appendChild(opt);
+// ── Year picker ───────────────────────────────────────────────────────────────
+function buildYearChecklist(subject) {
+  const saved = loadYearSelection(subject);
+  yearChecklist.innerHTML = "";
+  for (let y = THIS_YEAR; y >= MIN_YEAR; y--) {
+    const checked = saved.includes(y);
+    const item    = document.createElement("div");
+    item.className   = "year-check-item" + (checked ? " checked" : "");
+    item.dataset.year = y;
+    item.innerHTML   = `<span class="year-checkbox">${checked ? "✓" : ""}</span>${y}`;
+    item.addEventListener("click", () => {
+      item.classList.toggle("checked");
+      item.querySelector(".year-checkbox").textContent = item.classList.contains("checked") ? "✓" : "";
+      saveYearSelection(subject, getCheckedYears());
+      updateYearPickerLabel();
+      buildTracker();
     });
-  });
+    yearChecklist.appendChild(item);
+  }
+  updateYearPickerLabel();
 }
 
-// ── Year range helpers ────────────────────────────────────────────────────────
-function loadYearRange(subject) {
+function getCheckedYears() {
+  return [...yearChecklist.querySelectorAll(".year-check-item.checked")]
+    .map((el) => parseInt(el.dataset.year, 10));
+}
+
+function updateYearPickerLabel() {
+  const checked = getCheckedYears();
+  if (checked.length === 0) {
+    yearPickerLabel.textContent = "No years selected";
+    yearPickerLabel.classList.add("placeholder");
+  } else if (checked.length === 1) {
+    yearPickerLabel.textContent = checked[0];
+    yearPickerLabel.classList.remove("placeholder");
+  } else {
+    // Show range if contiguous, otherwise count
+    const sorted = [...checked].sort((a,b) => a-b);
+    const isContiguous = sorted.every((y,i) => i === 0 || y === sorted[i-1]+1);
+    yearPickerLabel.textContent = isContiguous
+      ? `${sorted[0]} – ${sorted[sorted.length-1]}`
+      : `${checked.length} years`;
+    yearPickerLabel.classList.remove("placeholder");
+  }
+}
+
+// Open/close picker
+yearPickerBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const isOpen = yearPickerPanel.classList.contains("open");
+  yearPickerPanel.classList.toggle("open", !isOpen);
+  yearPickerBtn.classList.toggle("open", !isOpen);
+});
+
+document.addEventListener("click", (e) => {
+  if (!document.getElementById("year-picker").contains(e.target)) {
+    yearPickerPanel.classList.remove("open");
+    yearPickerBtn.classList.remove("open");
+  }
+});
+
+yearPickAll.addEventListener("click", () => {
+  yearChecklist.querySelectorAll(".year-check-item").forEach((el) => {
+    el.classList.add("checked");
+    el.querySelector(".year-checkbox").textContent = "✓";
+  });
+  saveYearSelection(subjectSelect.value, getCheckedYears());
+  updateYearPickerLabel();
+  buildTracker();
+});
+
+yearPickNone.addEventListener("click", () => {
+  yearChecklist.querySelectorAll(".year-check-item").forEach((el) => {
+    el.classList.remove("checked");
+    el.querySelector(".year-checkbox").textContent = "";
+  });
+  saveYearSelection(subjectSelect.value, []);
+  updateYearPickerLabel();
+  buildTracker();
+});
+
+function loadYearSelection(subject) {
   try {
-    const raw = localStorage.getItem(yearRangeKey(subject));
+    const raw = localStorage.getItem(yearsSelKey(subject));
     if (raw) return JSON.parse(raw);
   } catch {}
-  // Default: current year back 2 years
-  return { from: THIS_YEAR - 2, to: THIS_YEAR };
+  // Default: last 2 years
+  return [THIS_YEAR, THIS_YEAR - 1];
 }
 
-function saveYearRange(subject, from, to) {
-  localStorage.setItem(yearRangeKey(subject), JSON.stringify({ from, to }));
+function saveYearSelection(subject, years) {
+  localStorage.setItem(yearsSelKey(subject), JSON.stringify(years));
   debouncedSaveSettings();
-}
-
-function applyYearRange(subject) {
-  const { from, to } = loadYearRange(subject);
-  yearFromSel.value = from;
-  yearToSel.value   = to;
-  enforceRange();
-}
-
-// Make sure "from" never exceeds "to"
-function enforceRange() {
-  const from = parseInt(yearFromSel.value, 10);
-  const to   = parseInt(yearToSel.value,   10);
-  if (from > to) yearToSel.value = from;
-  // Disable "to" options below "from"
-  [...yearToSel.options].forEach((opt) => {
-    opt.disabled = parseInt(opt.value, 10) < parseInt(yearFromSel.value, 10);
-  });
-  // Disable "from" options above "to"
-  [...yearFromSel.options].forEach((opt) => {
-    opt.disabled = parseInt(opt.value, 10) > parseInt(yearToSel.value, 10);
-  });
-}
-
-function getYearsInRange() {
-  const from = parseInt(yearFromSel.value, 10);
-  const to   = parseInt(yearToSel.value,   10);
-  const years = [];
-  for (let y = to; y >= from; y--) years.push(y);
-  return years;
 }
 
 // ── Auth UI ───────────────────────────────────────────────────────────────────
@@ -144,7 +186,7 @@ function showAuthSuccess(msg) { authSuccess.textContent = msg; authSuccess.style
 function hideAuthMsg()        { authError.style.display = "none"; authSuccess.style.display = "none"; }
 
 function setBtnLoading(btn, loading, text) {
-  btn.disabled    = loading;
+  btn.disabled = loading;
   btn.textContent = loading ? "Please wait…" : text;
 }
 
@@ -165,15 +207,25 @@ loginBtn.addEventListener("click", async () => {
 });
 
 signupBtn.addEventListener("click", async () => {
+  const name     = document.getElementById("signup-name").value.trim();
   const email    = document.getElementById("signup-email").value.trim();
   const password = document.getElementById("signup-password").value;
-  if (!email || !password) return showAuthError("Please fill in all fields.");
-  if (password.length < 6)  return showAuthError("Password must be at least 6 characters.");
+  if (!name || !email || !password) return showAuthError("Please fill in all fields.");
+  if (password.length < 6) return showAuthError("Password must be at least 6 characters.");
   setBtnLoading(signupBtn, true, "Create Free Account");
-  const { error } = await sb.auth.signUp({ email, password });
+  const { data, error } = await sb.auth.signUp({ email, password, options: { data: { display_name: name } } });
   setBtnLoading(signupBtn, false, "Create Free Account");
   if (error) showAuthError(error.message);
-  else       showAuthSuccess("Account created! You can now log in.");
+  else {
+    // Create leaderboard entry straight away
+    if (data?.user) {
+      await sb.from("leaderboard").upsert({
+        user_id: data.user.id, display_name: name, papers_done: 0,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "user_id" });
+    }
+    showAuthSuccess("Account created! You can now log in.");
+  }
 });
 
 logoutBtn.addEventListener("click", async () => {
@@ -182,13 +234,72 @@ logoutBtn.addEventListener("click", async () => {
   localStorage.removeItem(KEY_SETTINGS);
   Object.keys(SUBJECT_PAPERS).forEach((s) => {
     localStorage.removeItem(paperSelKey(s));
-    localStorage.removeItem(yearRangeKey(s));
+    localStorage.removeItem(yearsSelKey(s));
   });
 });
 
+// ── Leaderboard ───────────────────────────────────────────────────────────────
+lbBtn.addEventListener("click", openLeaderboard);
+lbClose.addEventListener("click", () => { lbOverlay.style.display = "none"; });
+lbOverlay.addEventListener("click", (e) => { if (e.target === lbOverlay) lbOverlay.style.display = "none"; });
+
+async function openLeaderboard() {
+  lbOverlay.style.display = "flex";
+  lbList.innerHTML = `<div class="lb-loading">Loading…</div>`;
+
+  const { data, error } = await sb
+    .from("leaderboard")
+    .select("user_id, display_name, papers_done")
+    .order("papers_done", { ascending: false })
+    .limit(20);
+
+  if (error || !data) {
+    lbList.innerHTML = `<div class="lb-loading">Could not load leaderboard.</div>`;
+    return;
+  }
+
+  if (data.length === 0) {
+    lbList.innerHTML = `<div class="lb-loading">No entries yet — be the first!</div>`;
+    return;
+  }
+
+  lbList.innerHTML = "";
+  data.forEach((row, i) => {
+    const rank    = i + 1;
+    const isMe    = row.user_id === currentUser?.id;
+    const div     = document.createElement("div");
+    div.className = "lb-row" + (isMe ? " lb-me" : "");
+    const rankClass = rank === 1 ? "rank-1" : rank === 2 ? "rank-2" : rank === 3 ? "rank-3" : "rank-other";
+    const rankIcon  = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`;
+    div.innerHTML = `
+      <span class="lb-rank ${rankClass}">${rankIcon}</span>
+      <span class="lb-name">${row.display_name}${isMe ? '<span class="you-tag">you</span>' : ""}</span>
+      <span class="lb-score">${row.papers_done}<span class="lb-score-label"> done</span></span>`;
+    lbList.appendChild(div);
+  });
+}
+
+async function updateLeaderboard() {
+  if (!currentUser) return;
+  const state   = loadStatus();
+  const total   = Object.values(state).filter((v) => v === "Done" || v === "Done + Reviewed").length;
+  const name    = currentUser.user_metadata?.display_name || currentUser.email?.split("@")[0] || "Anonymous";
+  await sb.from("leaderboard").upsert({
+    user_id: currentUser.id, display_name: name, papers_done: total,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "user_id" });
+  if (paperCounterVal) paperCounterVal.textContent = total;
+}
+
+function refreshPaperCounter() {
+  const state = loadStatus();
+  const total = Object.values(state).filter((v) => v === "Done" || v === "Done + Reviewed").length;
+  if (paperCounterVal) paperCounterVal.textContent = total;
+}
+
 // ── App show/hide ─────────────────────────────────────────────────────────────
 function showApp()  { authOverlay.style.display = "none"; appEl.style.display = "block"; }
-function showAuth() { authOverlay.style.display = "flex"; appEl.style.display = "none";  }
+function showAuth() { authOverlay.style.display = "flex"; appEl.style.display = "none"; }
 
 // ── Auth handlers ─────────────────────────────────────────────────────────────
 async function handleSignedInUser(user, event = "INITIAL") {
@@ -196,7 +307,7 @@ async function handleSignedInUser(user, event = "INITIAL") {
   if (initializedForUserId === currentUser.id && appBootstrapped && event !== "SIGNED_IN") return;
   initializedForUserId     = currentUser.id;
   userEmailEl.textContent  = currentUser.email || "";
-  userAvatarEl.textContent = (currentUser.email?.[0] || "U").toUpperCase();
+  userAvatarEl.textContent = (currentUser.user_metadata?.display_name?.[0] || currentUser.email?.[0] || "U").toUpperCase();
   showApp();
   await loadAllFromCloud();
   initApp();
@@ -205,8 +316,7 @@ async function handleSignedInUser(user, event = "INITIAL") {
 
 function handleSignedOutUser() {
   currentUser = null; initializedForUserId = null; appBootstrapped = false;
-  showAuth();
-  tracker.innerHTML = ""; summary.innerHTML = "";
+  showAuth(); tracker.innerHTML = ""; summary.innerHTML = "";
 }
 
 (async function bootstrapAuth() {
@@ -239,21 +349,16 @@ async function loadAllFromCloud() {
 
   if (settings) {
     localStorage.setItem(KEY_SETTINGS, JSON.stringify({ subject: settings.subject }));
-
     const sel = settings.paper_selections || {};
 
-    // Paper selections
     Object.keys(SUBJECT_PAPERS).forEach((subj) => {
-      if (Array.isArray(sel[subj])) {
-        localStorage.setItem(paperSelKey(subj), JSON.stringify(sel[subj]));
-      }
+      if (Array.isArray(sel[subj])) localStorage.setItem(paperSelKey(subj), JSON.stringify(sel[subj]));
     });
 
-    // Year ranges stored under __yearranges__
-    const ranges = sel.__yearranges__;
-    if (ranges && typeof ranges === "object") {
-      Object.entries(ranges).forEach(([subj, range]) => {
-        localStorage.setItem(yearRangeKey(subj), JSON.stringify(range));
+    const yearsMap = sel.__yearslist__;
+    if (yearsMap && typeof yearsMap === "object") {
+      Object.entries(yearsMap).forEach(([subj, yrs]) => {
+        localStorage.setItem(yearsSelKey(subj), JSON.stringify(yrs));
       });
     }
   }
@@ -264,17 +369,16 @@ async function saveStatusToCloud(key, status) {
   if (!currentUser) return;
   showToast();
   const [subject, year, series, paper] = key.split("__");
-  const { error } = await sb.from("paper_status").upsert({
-    user_id: currentUser.id, subject,
-    year: parseInt(year, 10), series, paper, status,
+  await sb.from("paper_status").upsert({
+    user_id: currentUser.id, subject, year: parseInt(year,10), series, paper, status,
     updated_at: new Date().toISOString(),
   }, { onConflict: "user_id,subject,year,series,paper" });
-  if (error) console.error("saveStatusToCloud:", error);
+  updateLeaderboard();
 }
 
 function debouncedSaveStatus(key, status) {
   clearTimeout(statusSaveTimer);
-  statusSaveTimer = setTimeout(() => saveStatusToCloud(key, status), 250);
+  statusSaveTimer = setTimeout(() => saveStatusToCloud(key, status), 300);
 }
 
 // ── Cloud: save settings ──────────────────────────────────────────────────────
@@ -285,22 +389,16 @@ async function saveSettingsToCloud() {
     const raw = localStorage.getItem(paperSelKey(subj));
     if (raw) try { paperSelections[subj] = JSON.parse(raw); } catch {}
   });
-  // Store year ranges
-  const yearranges = {};
+  const yearsMap = {};
   Object.keys(SUBJECT_PAPERS).forEach((subj) => {
-    const raw = localStorage.getItem(yearRangeKey(subj));
-    if (raw) try { yearranges[subj] = JSON.parse(raw); } catch {}
+    const raw = localStorage.getItem(yearsSelKey(subj));
+    if (raw) try { yearsMap[subj] = JSON.parse(raw); } catch {}
   });
-  paperSelections.__yearranges__ = yearranges;
-
+  paperSelections.__yearslist__ = yearsMap;
   const s = loadSettings();
-  const range = loadYearRange(subjectSelect.value);
   await sb.from("user_settings").upsert({
-    user_id:          currentUser.id,
-    subject:          s?.subject || subjectSelect.value,
-    years:            range.to - range.from + 1,
-    paper_selections: paperSelections,
-    updated_at:       new Date().toISOString(),
+    user_id: currentUser.id, subject: s?.subject || subjectSelect.value,
+    years: 0, paper_selections: paperSelections, updated_at: new Date().toISOString(),
   }, { onConflict: "user_id" });
 }
 
@@ -332,11 +430,6 @@ function saveActiveSubject() {
   debouncedSaveSettings();
 }
 
-// ── Paper picker ──────────────────────────────────────────────────────────────
-function getSelectedPapers() {
-  return [...chipGrid.querySelectorAll(".chip.active")].map((c) => c.dataset.paper);
-}
-
 function loadPaperSelection(subject) {
   try {
     const raw = localStorage.getItem(paperSelKey(subject));
@@ -348,6 +441,11 @@ function loadPaperSelection(subject) {
 function savePaperSelection(subject, selected) {
   localStorage.setItem(paperSelKey(subject), JSON.stringify(selected));
   debouncedSaveSettings();
+}
+
+// ── Paper chips ───────────────────────────────────────────────────────────────
+function getSelectedPapers() {
+  return [...chipGrid.querySelectorAll(".chip.active")].map((c) => c.dataset.paper);
 }
 
 function buildChips(subject) {
@@ -375,7 +473,6 @@ pickAllBtn.addEventListener("click", () => {
   savePaperSelection(subject, [...SUBJECT_PAPERS[subject]]);
   buildTracker();
 });
-
 pickNoneBtn.addEventListener("click", () => {
   const subject = subjectSelect.value;
   chipGrid.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
@@ -387,9 +484,7 @@ pickNoneBtn.addEventListener("click", () => {
 function updateSummary() {
   const counts = STATUS_OPTIONS.reduce((a, v) => ({ ...a, [v]: 0 }), {});
   let total = 0;
-  tracker.querySelectorAll("select.status").forEach((s) => {
-    counts[s.value] += 1; total += 1;
-  });
+  tracker.querySelectorAll("select.status").forEach((s) => { counts[s.value]++; total++; });
   const completed = counts["Done"] + counts["Done + Reviewed"];
   const pct       = total > 0 ? Math.round((completed / total) * 100) : 0;
 
@@ -408,7 +503,6 @@ function updateSummary() {
   summary.innerHTML = badges + bar;
 }
 
-// ── Year card progress ────────────────────────────────────────────────────────
 function updateYearProgress(card) {
   const selects = card.querySelectorAll("select.status");
   const done    = [...selects].filter((s) => s.value === "Done" || s.value === "Done + Reviewed").length;
@@ -423,8 +517,8 @@ function updateYearProgress(card) {
 function buildTracker() {
   const subject = subjectSelect.value;
   const papers  = getSelectedPapers();
+  const years   = getCheckedYears().sort((a,b) => b - a); // newest first
   const saved   = loadStatus();
-  const years   = getYearsInRange();
 
   tracker.innerHTML = "";
 
@@ -437,14 +531,14 @@ function buildTracker() {
     updateSummary(); return;
   }
   if (years.length === 0) {
-    tracker.innerHTML = `<div class="empty-state">Please select a valid year range.</div>`;
+    tracker.innerHTML = `<div class="empty-state">No years selected — choose years from the dropdown above.</div>`;
     updateSummary(); return;
   }
 
   years.forEach((year, idx) => {
     const card       = document.createElement("article");
     card.className   = "year-card";
-    card.style.animationDelay = `${idx * 0.06}s`;
+    card.style.animationDelay = `${idx * 0.05}s`;
 
     const header = document.createElement("div");
     header.className = "year-card-header";
@@ -507,14 +601,13 @@ function buildTracker() {
         debouncedSaveStatus(sel.dataset.key, sel.value);
         updateSummary();
         updateYearProgress(card);
+        refreshPaperCounter();
       });
     });
 
     updateYearProgress(card);
   });
 
-  // Save this subject's range
-  saveYearRange(subject, parseInt(yearFromSel.value, 10), parseInt(yearToSel.value, 10));
   saveActiveSubject();
   updateSummary();
 }
@@ -522,39 +615,26 @@ function buildTracker() {
 // ── Subject change ────────────────────────────────────────────────────────────
 function onSubjectChange() {
   const subject = subjectSelect.value;
-  applyYearRange(subject);
+  buildYearChecklist(subject);
   buildChips(subject);
   buildTracker();
 }
 
 // ── App init ──────────────────────────────────────────────────────────────────
 function initApp() {
-  populateYearSelects();
-
   if (subjectSelect.children.length === 0) {
     Object.keys(SUBJECT_PAPERS).forEach((subj) => {
       const opt = document.createElement("option");
       opt.value = subj; opt.textContent = subj;
       subjectSelect.appendChild(opt);
     });
+    subjectSelect.addEventListener("change", onSubjectChange);
   }
 
-  // Restore last active subject
   const s             = loadSettings();
   const validSubjects = Object.keys(SUBJECT_PAPERS);
   subjectSelect.value = (s?.subject && SUBJECT_PAPERS[s.subject]) ? s.subject : validSubjects[0];
 
-  // Wire events (only once)
-  subjectSelect.onchange = onSubjectChange;
-
-  yearFromSel.onchange = () => {
-    enforceRange();
-    buildTracker();
-  };
-  yearToSel.onchange = () => {
-    enforceRange();
-    buildTracker();
-  };
-
+  refreshPaperCounter();
   onSubjectChange();
 }

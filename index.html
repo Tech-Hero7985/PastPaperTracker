@@ -8,14 +8,10 @@
   <meta name="keywords" content="IAL past papers, Edexcel IAL, A Level tracker, past paper progress, Mathematics, Physics, Chemistry, Biology" />
   <meta name="author" content="Tech-Hero7985" />
   <link rel="canonical" href="http://wadhwanimedia.me/PastPaperTracker/" />
-
-  <!-- Open Graph (WhatsApp, Facebook, Discord previews) -->
   <meta property="og:title" content="IAL Past Paper Tracker" />
   <meta property="og:description" content="Track your Edexcel IAL past paper progress. Free, fast, synced across devices." />
   <meta property="og:url" content="http://wadhwanimedia.me/PastPaperTracker/" />
   <meta property="og:type" content="website" />
-
-  <!-- Twitter card -->
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="IAL Past Paper Tracker" />
   <meta name="twitter:description" content="Track your Edexcel IAL past paper progress. Free, fast, synced across devices." />
@@ -34,16 +30,12 @@
         <span class="logo-text">IAL Tracker</span>
       </div>
       <p class="auth-sub">Sign in to sync your progress across all devices</p>
-
       <div class="auth-tabs">
         <button class="auth-tab active" data-tab="login">Log In</button>
         <button class="auth-tab" data-tab="signup">Sign Up</button>
       </div>
-
       <div id="auth-error"   class="auth-msg auth-msg--error"   style="display:none"></div>
       <div id="auth-success" class="auth-msg auth-msg--success" style="display:none"></div>
-
-      <!-- Login form -->
       <div class="auth-form" id="login-form">
         <div class="auth-field">
           <label for="login-email">Email</label>
@@ -55,9 +47,11 @@
         </div>
         <button class="auth-submit" id="login-btn">Log In</button>
       </div>
-
-      <!-- Signup form -->
       <div class="auth-form" id="signup-form" style="display:none">
+        <div class="auth-field">
+          <label for="signup-name">Display name</label>
+          <input type="text" id="signup-name" placeholder="e.g. Ayush" autocomplete="nickname" />
+        </div>
         <div class="auth-field">
           <label for="signup-email">Email</label>
           <input type="email" id="signup-email" placeholder="you@example.com" autocomplete="email" />
@@ -71,6 +65,18 @@
     </div>
   </div>
 
+  <!-- ── Leaderboard Modal ──────────────────────────────────────────────── -->
+  <div id="lb-overlay" class="lb-overlay" style="display:none">
+    <div class="lb-card">
+      <div class="lb-header">
+        <span class="lb-title">🏆 Leaderboard</span>
+        <button class="lb-close" id="lb-close">✕</button>
+      </div>
+      <div class="lb-subtitle">Papers marked Done or Done + Reviewed</div>
+      <div id="lb-list" class="lb-list"><div class="lb-loading">Loading…</div></div>
+    </div>
+  </div>
+
   <!-- ── Main App ───────────────────────────────────────────────────────── -->
   <div id="app" style="display:none">
 
@@ -81,18 +87,36 @@
           <span class="logo-text">IAL Tracker</span>
         </div>
         <p class="tagline">Track your past paper progress</p>
-        <div class="beta-testers">
-          <span class="beta-label">Beta Testers</span>
-          <div class="beta-avatars">
-            <a class="beta-avatar" href="https://www.instagram.com/aaron0_0parker/" target="_blank" rel="noopener" title="@aaron0_0parker" style="--av-color:#f0a500">A</a>
-            <a class="beta-avatar" href="https://www.instagram.com/shevvyboy/" target="_blank" rel="noopener" title="@shevvyboy" style="--av-color:#3b7dd8">S</a>
-            <a class="beta-avatar" href="https://www.instagram.com/_krish_061208/" target="_blank" rel="noopener" title="@_krish_061208" style="--av-color:#22c97a">K</a>
+
+        <div class="header-actions">
+          <!-- Paper counter -->
+          <div class="paper-counter" id="paper-counter" title="Your total papers done across all subjects">
+            <span class="paper-counter-icon">📄</span>
+            <span class="paper-counter-val" id="paper-counter-val">0</span>
+            <span class="paper-counter-label">done</span>
           </div>
-        </div>
-        <div class="user-pill" id="user-pill">
-          <span class="user-avatar" id="user-avatar"></span>
-          <span class="user-email" id="user-email"></span>
-          <button class="logout-btn" id="logout-btn">Log out</button>
+
+          <!-- Leaderboard button -->
+          <button class="lb-btn" id="lb-btn" title="Leaderboard">
+            🏆 <span class="lb-btn-label">Leaderboard</span>
+          </button>
+
+          <!-- Beta testers -->
+          <div class="beta-testers">
+            <span class="beta-label">Beta Testers</span>
+            <div class="beta-avatars">
+              <a class="beta-avatar" href="https://www.instagram.com/aaron0_0parker/" target="_blank" rel="noopener" title="@aaron0_0parker" style="--av-color:#f0a500">A</a>
+              <a class="beta-avatar" href="https://www.instagram.com/shevvyboy/" target="_blank" rel="noopener" title="@shevvyboy" style="--av-color:#3b7dd8">S</a>
+              <a class="beta-avatar" href="https://www.instagram.com/_krish_061208/" target="_blank" rel="noopener" title="@_krish_061208" style="--av-color:#22c97a">K</a>
+            </div>
+          </div>
+
+          <!-- User pill -->
+          <div class="user-pill" id="user-pill">
+            <span class="user-avatar" id="user-avatar"></span>
+            <span class="user-email" id="user-email"></span>
+            <button class="logout-btn" id="logout-btn">Log out</button>
+          </div>
         </div>
       </div>
     </header>
@@ -106,12 +130,20 @@
             <select id="subject"></select>
           </div>
           <div class="field">
-            <label for="year-from">From year</label>
-            <select id="year-from"></select>
-          </div>
-          <div class="field">
-            <label for="year-to">To year</label>
-            <select id="year-to"></select>
+            <label>Years</label>
+            <div class="year-picker" id="year-picker">
+              <button type="button" class="year-picker-btn" id="year-picker-btn">
+                <span id="year-picker-label">Select years</span>
+                <svg width="12" height="8" viewBox="0 0 12 8" fill="none"><path d="M1 1l5 5 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </button>
+              <div class="year-picker-panel" id="year-picker-panel">
+                <div class="year-picker-actions">
+                  <button type="button" id="year-pick-all">All</button>
+                  <button type="button" id="year-pick-none">None</button>
+                </div>
+                <div class="year-checklist" id="year-checklist"></div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
