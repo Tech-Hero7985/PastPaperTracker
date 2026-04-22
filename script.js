@@ -1,6 +1,3 @@
-// ── Force login on every page load ───────────────────────────────────────────
-localStorage.removeItem("sb-kymqjecvcnmpnjcxfpuv-auth-token");
-
 // ── Supabase ──────────────────────────────────────────────────────────────────
 const { createClient } = supabase;
 const sb = createClient(
@@ -13,6 +10,79 @@ let settingsTimer        = null;
 let statusSaveTimer      = null;
 let initializedForUserId = null;
 let appBootstrapped      = false;
+
+// ── Google OAuth ─────────────────────────────────────────────────────────────
+document.getElementById("google-btn").addEventListener("click", async () => {
+  const { error } = await sb.auth.signInWithOAuth({
+    provider: "google",
+    options:  { redirectTo: "https://wadhwanimedia.me/" },
+  });
+  if (error) alert("Google sign-in failed: " + error.message);
+});
+
+// ── Password reset ────────────────────────────────────────────────────────────
+document.getElementById("forgot-link").addEventListener("click", () => {
+  document.getElementById("login-form").style.display   = "none";
+  document.getElementById("reset-form").style.display   = "flex";
+  document.getElementById("auth-error").style.display   = "none";
+  document.getElementById("auth-success").style.display = "none";
+});
+
+document.getElementById("back-to-login").addEventListener("click", () => {
+  document.getElementById("reset-form").style.display  = "none";
+  document.getElementById("login-form").style.display  = "flex";
+  document.getElementById("auth-error").style.display  = "none";
+  document.getElementById("auth-success").style.display = "none";
+});
+
+document.getElementById("reset-btn").addEventListener("click", async () => {
+  const email = document.getElementById("reset-email").value.trim();
+  if (!email) {
+    document.getElementById("auth-error").textContent   = "Please enter your email.";
+    document.getElementById("auth-error").style.display = "block";
+    return;
+  }
+  document.getElementById("reset-btn").disabled    = true;
+  document.getElementById("reset-btn").textContent = "Sending…";
+  const { error } = await sb.auth.resetPasswordForEmail(email, {
+    redirectTo: "https://wadhwanimedia.me/",
+  });
+  document.getElementById("reset-btn").disabled    = false;
+  document.getElementById("reset-btn").textContent = "Send Reset Link";
+  if (error) {
+    document.getElementById("auth-error").textContent   = error.message;
+    document.getElementById("auth-error").style.display = "block";
+  } else {
+    document.getElementById("auth-error").style.display   = "none";
+    document.getElementById("auth-success").textContent   = "Reset link sent! Check your inbox.";
+    document.getElementById("auth-success").style.display = "block";
+  }
+});
+
+// ── Set new password (after clicking reset link) ──────────────────────────────
+document.getElementById("new-password-btn").addEventListener("click", async () => {
+  const newPass = document.getElementById("new-password-input").value;
+  if (!newPass || newPass.length < 6) {
+    document.getElementById("new-password-error").textContent   = "Password must be at least 6 characters.";
+    document.getElementById("new-password-error").style.display = "block";
+    return;
+  }
+  document.getElementById("new-password-btn").disabled    = true;
+  document.getElementById("new-password-btn").textContent = "Updating…";
+  const { error } = await sb.auth.updateUser({ password: newPass });
+  document.getElementById("new-password-btn").disabled    = false;
+  document.getElementById("new-password-btn").textContent = "Update Password";
+  if (error) {
+    document.getElementById("new-password-error").textContent   = error.message;
+    document.getElementById("new-password-error").style.display = "block";
+  } else {
+    document.getElementById("new-password-success").textContent   = "Password updated! Logging you in…";
+    document.getElementById("new-password-success").style.display = "block";
+    setTimeout(() => {
+      document.getElementById("new-password-overlay").style.display = "none";
+    }, 1500);
+  }
+});
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 const SUBJECT_PAPERS = {
@@ -388,6 +458,12 @@ function handleSignedOutUser() {
 })();
 
 sb.auth.onAuthStateChange(async (event, session) => {
+  if (event === "PASSWORD_RECOVERY") {
+    // Hide auth overlay, show the set-new-password modal
+    document.getElementById("auth-overlay").style.display        = "none";
+    document.getElementById("new-password-overlay").style.display = "flex";
+    return;
+  }
   if (session?.user) await handleSignedInUser(session.user, event);
   else               handleSignedOutUser();
 });

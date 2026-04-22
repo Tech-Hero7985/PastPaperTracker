@@ -346,3 +346,34 @@ select.status[data-status="Done + Reviewed"] { border-left: 3px solid var(--stat
 
   .container { padding: 1rem; }
 }
+
+/* ── Google button ───────────────────────────────────────────────────────── */
+.google-btn {
+  display: flex; align-items: center; justify-content: center; gap: 0.65rem;
+  width: 100%; background: #fff; color: #1f1f1f;
+  border: 1px solid #dadce0; border-radius: var(--radius-sm);
+  padding: 0.6rem 1rem; font-family: var(--font-body); font-size: 0.9rem;
+  font-weight: 500; cursor: pointer; margin-bottom: 0.1rem;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.google-btn:hover { background: #f8f8f8; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+.google-btn:active { background: #f0f0f0; }
+
+/* Divider */
+.auth-divider {
+  display: flex; align-items: center; gap: 0.75rem;
+  margin: 0.85rem 0 0.7rem; color: var(--text-dim);
+  font-family: var(--font-mono); font-size: 0.7rem;
+}
+.auth-divider::before,
+.auth-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+/* Forgot / back link */
+.forgot-link {
+  background: none; border: none; color: var(--text-dim);
+  font-family: var(--font-mono); font-size: 0.72rem;
+  cursor: pointer; text-align: center; width: 100%;
+  padding: 0.3rem; margin-top: 0.1rem;
+  transition: color 0.15s;
+}
+.forgot-link:hover { color: var(--accent); }
