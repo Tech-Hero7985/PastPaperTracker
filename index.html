@@ -15,6 +15,7 @@
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="IAL Past Paper Tracker" />
   <meta name="twitter:description" content="Track your Edexcel IAL past paper progress. Free, fast, synced across devices." />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@300;400;500&display=swap" rel="stylesheet" />
@@ -89,19 +90,14 @@
         <p class="tagline">Track your past paper progress</p>
 
         <div class="header-actions">
-          <!-- Paper counter -->
           <div class="paper-counter" id="paper-counter" title="Your total papers done across all subjects">
             <span class="paper-counter-icon">📄</span>
             <span class="paper-counter-val" id="paper-counter-val">0</span>
             <span class="paper-counter-label">done</span>
           </div>
-
-          <!-- Leaderboard button -->
           <button class="lb-btn" id="lb-btn" title="Leaderboard">
             🏆 <span class="lb-btn-label">Leaderboard</span>
           </button>
-
-          <!-- Beta testers -->
           <div class="beta-testers">
             <span class="beta-label">Beta Testers</span>
             <div class="beta-avatars">
@@ -110,54 +106,69 @@
               <a class="beta-avatar" href="https://www.instagram.com/_krish_061208/" target="_blank" rel="noopener" title="@_krish_061208" style="--av-color:#22c97a">K</a>
             </div>
           </div>
-
-          <!-- User pill -->
           <div class="user-pill" id="user-pill">
             <span class="user-avatar" id="user-avatar"></span>
             <span class="user-email" id="user-email"></span>
             <button class="logout-btn" id="logout-btn">Log out</button>
           </div>
+          <!-- Hamburger (mobile only) -->
+          <button class="hamburger" id="hamburger" aria-label="Settings" title="Settings">
+            <span></span><span></span><span></span>
+          </button>
         </div>
       </div>
     </header>
 
     <main class="container">
 
-      <section class="controls-card">
-        <div class="controls">
-          <div class="field">
-            <label for="subject">Subject</label>
-            <select id="subject"></select>
-          </div>
-          <div class="field">
-            <label>Years</label>
-            <div class="year-picker" id="year-picker">
-              <button type="button" class="year-picker-btn" id="year-picker-btn">
-                <span id="year-picker-label">Select years</span>
-                <svg width="12" height="8" viewBox="0 0 12 8" fill="none"><path d="M1 1l5 5 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-              </button>
-              <div class="year-picker-panel" id="year-picker-panel">
-                <div class="year-picker-actions">
-                  <button type="button" id="year-pick-all">All</button>
-                  <button type="button" id="year-pick-none">None</button>
+      <!-- Settings panel (desktop: always visible; mobile: toggled by hamburger) -->
+      <div class="settings-panel" id="settings-panel">
+
+        <section class="controls-card">
+          <div class="controls">
+            <div class="field">
+              <label for="subject">Subject</label>
+              <select id="subject"></select>
+            </div>
+            <div class="field">
+              <label>Years</label>
+              <div class="year-picker" id="year-picker">
+                <button type="button" class="year-picker-btn" id="year-picker-btn">
+                  <span id="year-picker-label" class="placeholder">Select years</span>
+                  <svg width="12" height="8" viewBox="0 0 12 8" fill="none"><path d="M1 1l5 5 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                </button>
+                <div class="year-picker-panel" id="year-picker-panel">
+                  <div class="year-picker-actions">
+                    <button type="button" id="year-pick-all">All</button>
+                    <button type="button" id="year-pick-none">None</button>
+                  </div>
+                  <div class="year-checklist" id="year-checklist"></div>
                 </div>
-                <div class="year-checklist" id="year-checklist"></div>
+              </div>
+            </div>
+            <div class="field field--search">
+              <label for="search-input">Search papers</label>
+              <div class="search-wrap">
+                <svg class="search-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.4"/><path d="M10 10l2.5 2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                <input type="text" id="search-input" placeholder="e.g. P4" autocomplete="off" />
+                <button type="button" id="search-clear" class="search-clear" style="display:none">✕</button>
               </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section class="paper-picker-card">
-        <div class="picker-header">
-          <span class="picker-label">Papers to track</span>
-          <div class="picker-actions">
-            <button type="button" id="pick-all">Select all</button>
-            <button type="button" id="pick-none">Clear all</button>
+        <section class="paper-picker-card">
+          <div class="picker-header">
+            <span class="picker-label">Papers to track</span>
+            <div class="picker-actions">
+              <button type="button" id="pick-all">Select all</button>
+              <button type="button" id="pick-none">Clear all</button>
+            </div>
           </div>
-        </div>
-        <div class="chip-grid" id="chip-grid"></div>
-      </section>
+          <div class="chip-grid" id="chip-grid"></div>
+        </section>
+
+      </div><!-- /settings-panel -->
 
       <section id="summary" class="summary" aria-live="polite"></section>
       <section id="tracker" class="tracker"></section>

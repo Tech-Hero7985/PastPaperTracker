@@ -27,10 +27,11 @@ const THIS_YEAR      = new Date().getFullYear();
 const MIN_YEAR       = 2010;
 
 // ── Storage keys ──────────────────────────────────────────────────────────────
-const KEY_STATUS   = "ial-tracker-state";
-const KEY_SETTINGS = "ial-tracker-settings";
-const paperSelKey  = (s) => `ial-tracker-papers__${s}`;
-const yearsSelKey  = (s) => `ial-tracker-yearslist__${s}`;
+const KEY_STATUS      = "ial-tracker-state";
+const KEY_SETTINGS    = "ial-tracker-settings";
+const paperSelKey     = (s)    => `ial-tracker-papers__${s}`;
+const yearsSelKey     = (s)    => `ial-tracker-yearslist__${s}`;
+const seriesToggleKey = (s, y) => `ial-tracker-series-toggle__${s}__${y}`;
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const authOverlay     = document.getElementById("auth-overlay");
@@ -51,6 +52,8 @@ const yearPickerLabel = document.getElementById("year-picker-label");
 const yearChecklist   = document.getElementById("year-checklist");
 const yearPickAll     = document.getElementById("year-pick-all");
 const yearPickNone    = document.getElementById("year-pick-none");
+const searchInput     = document.getElementById("search-input");
+const searchClear     = document.getElementById("search-clear");
 const chipGrid        = document.getElementById("chip-grid");
 const pickAllBtn      = document.getElementById("pick-all");
 const pickNoneBtn     = document.getElementById("pick-none");
@@ -61,17 +64,67 @@ const lbBtn           = document.getElementById("lb-btn");
 const lbOverlay       = document.getElementById("lb-overlay");
 const lbClose         = document.getElementById("lb-close");
 const lbList          = document.getElementById("lb-list");
+const hamburger       = document.getElementById("hamburger");
+const settingsPanel   = document.getElementById("settings-panel");
 
-// ── Sync toast ────────────────────────────────────────────────────────────────
-const toast = document.createElement("div");
-toast.className = "sync-toast";
-toast.innerHTML = `<span class="sync-dot"></span>Saving…`;
-document.body.appendChild(toast);
-let toastTimer;
-function showToast() {
-  clearTimeout(toastTimer);
-  toast.classList.add("visible");
-  toastTimer = setTimeout(() => toast.classList.remove("visible"), 1800);
+// ── Toasts ────────────────────────────────────────────────────────────────────
+const syncToast = document.createElement("div");
+syncToast.className = "sync-toast";
+syncToast.innerHTML = `<span class="sync-dot"></span>Saving…`;
+document.body.appendChild(syncToast);
+let syncToastTimer;
+function showSyncToast() {
+  clearTimeout(syncToastTimer);
+  syncToast.classList.add("visible");
+  syncToastTimer = setTimeout(() => syncToast.classList.remove("visible"), 1800);
+}
+
+const celebrateToast = document.createElement("div");
+celebrateToast.className = "celebrate-toast";
+document.body.appendChild(celebrateToast);
+let celebrateTimer;
+function showCelebration(msg) {
+  clearTimeout(celebrateTimer);
+  celebrateToast.textContent = msg;
+  celebrateToast.classList.add("visible");
+  celebrateTimer = setTimeout(() => celebrateToast.classList.remove("visible"), 3000);
+}
+
+// ── Hamburger (mobile) ────────────────────────────────────────────────────────
+hamburger.addEventListener("click", () => {
+  hamburger.classList.toggle("open");
+  settingsPanel.classList.toggle("open");
+});
+
+// ── Search ────────────────────────────────────────────────────────────────────
+searchInput.addEventListener("input", () => {
+  const q = searchInput.value.trim();
+  searchClear.style.display = q ? "block" : "none";
+  applySearch(q);
+});
+
+searchClear.addEventListener("click", () => {
+  searchInput.value = "";
+  searchClear.style.display = "none";
+  applySearch("");
+});
+
+function applySearch(q) {
+  const term = q.toLowerCase();
+  tracker.querySelectorAll(".year-card").forEach((card) => {
+    let cardHasVisible = false;
+    card.querySelectorAll("tbody tr").forEach((row) => {
+      // Don't unhide rows belonging to a hidden series
+      const series = row.closest(".series");
+      if (series && series.classList.contains("series-hidden")) return;
+      const name = row.querySelector(".paper-name")?.textContent.toLowerCase() || "";
+      const show = !term || name.includes(term);
+      row.classList.toggle("row-hidden", !show);
+      if (show) cardHasVisible = true;
+    });
+    card.classList.toggle("hidden", !!term && !cardHasVisible);
+  });
+  updateSummary();
 }
 
 // ── Year picker ───────────────────────────────────────────────────────────────
@@ -81,9 +134,9 @@ function buildYearChecklist(subject) {
   for (let y = THIS_YEAR; y >= MIN_YEAR; y--) {
     const checked = saved.includes(y);
     const item    = document.createElement("div");
-    item.className   = "year-check-item" + (checked ? " checked" : "");
+    item.className    = "year-check-item" + (checked ? " checked" : "");
     item.dataset.year = y;
-    item.innerHTML   = `<span class="year-checkbox">${checked ? "✓" : ""}</span>${y}`;
+    item.innerHTML    = `<span class="year-checkbox">${checked ? "✓" : ""}</span>${y}`;
     item.addEventListener("click", () => {
       item.classList.toggle("checked");
       item.querySelector(".year-checkbox").textContent = item.classList.contains("checked") ? "✓" : "";
@@ -107,11 +160,10 @@ function updateYearPickerLabel() {
     yearPickerLabel.textContent = "No years selected";
     yearPickerLabel.classList.add("placeholder");
   } else if (checked.length === 1) {
-    yearPickerLabel.textContent = checked[0];
+    yearPickerLabel.textContent = String(checked[0]);
     yearPickerLabel.classList.remove("placeholder");
   } else {
-    // Show range if contiguous, otherwise count
-    const sorted = [...checked].sort((a,b) => a-b);
+    const sorted       = [...checked].sort((a,b) => a-b);
     const isContiguous = sorted.every((y,i) => i === 0 || y === sorted[i-1]+1);
     yearPickerLabel.textContent = isContiguous
       ? `${sorted[0]} – ${sorted[sorted.length-1]}`
@@ -120,7 +172,6 @@ function updateYearPickerLabel() {
   }
 }
 
-// Open/close picker
 yearPickerBtn.addEventListener("click", (e) => {
   e.stopPropagation();
   const isOpen = yearPickerPanel.classList.contains("open");
@@ -160,13 +211,37 @@ function loadYearSelection(subject) {
     const raw = localStorage.getItem(yearsSelKey(subject));
     if (raw) return JSON.parse(raw);
   } catch {}
-  // Default: last 2 years
   return [THIS_YEAR, THIS_YEAR - 1];
 }
 
 function saveYearSelection(subject, years) {
   localStorage.setItem(yearsSelKey(subject), JSON.stringify(years));
   debouncedSaveSettings();
+}
+
+// ── Series toggles per year ───────────────────────────────────────────────────
+function loadSeriesToggle(subject, year) {
+  try {
+    const raw = localStorage.getItem(seriesToggleKey(subject, year));
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  // Default: all series enabled
+  return { "January": true, "May/June": true, "October/November": true };
+}
+
+function saveSeriesToggle(subject, year, toggles) {
+  localStorage.setItem(seriesToggleKey(subject, year), JSON.stringify(toggles));
+  debouncedSaveSettings();
+}
+
+// ── Series complete check ─────────────────────────────────────────────────────
+function checkSeriesComplete(card, seriesName, year, subject) {
+  const section = card.querySelector(`.series[data-series="${seriesName}"]`);
+  if (!section || section.classList.contains("series-hidden")) return;
+  const selects = [...section.querySelectorAll("select.status")];
+  if (selects.length === 0) return;
+  const allDone = selects.every((s) => s.value === "Done" || s.value === "Done + Reviewed");
+  if (allDone) showCelebration(`🔥 ${seriesName} ${year} complete!`);
 }
 
 // ── Auth UI ───────────────────────────────────────────────────────────────────
@@ -217,7 +292,6 @@ signupBtn.addEventListener("click", async () => {
   setBtnLoading(signupBtn, false, "Create Free Account");
   if (error) showAuthError(error.message);
   else {
-    // Create leaderboard entry straight away
     if (data?.user) {
       await sb.from("leaderboard").upsert({
         user_id: data.user.id, display_name: name, papers_done: 0,
@@ -246,28 +320,14 @@ lbOverlay.addEventListener("click", (e) => { if (e.target === lbOverlay) lbOverl
 async function openLeaderboard() {
   lbOverlay.style.display = "flex";
   lbList.innerHTML = `<div class="lb-loading">Loading…</div>`;
-
-  const { data, error } = await sb
-    .from("leaderboard")
-    .select("user_id, display_name, papers_done")
-    .order("papers_done", { ascending: false })
-    .limit(20);
-
-  if (error || !data) {
-    lbList.innerHTML = `<div class="lb-loading">Could not load leaderboard.</div>`;
-    return;
-  }
-
-  if (data.length === 0) {
-    lbList.innerHTML = `<div class="lb-loading">No entries yet — be the first!</div>`;
-    return;
-  }
-
+  const { data, error } = await sb.from("leaderboard").select("user_id, display_name, papers_done").order("papers_done", { ascending: false }).limit(20);
+  if (error || !data) { lbList.innerHTML = `<div class="lb-loading">Could not load leaderboard.</div>`; return; }
+  if (data.length === 0) { lbList.innerHTML = `<div class="lb-loading">No entries yet — be the first!</div>`; return; }
   lbList.innerHTML = "";
   data.forEach((row, i) => {
-    const rank    = i + 1;
-    const isMe    = row.user_id === currentUser?.id;
-    const div     = document.createElement("div");
+    const rank = i + 1;
+    const isMe = row.user_id === currentUser?.id;
+    const div  = document.createElement("div");
     div.className = "lb-row" + (isMe ? " lb-me" : "");
     const rankClass = rank === 1 ? "rank-1" : rank === 2 ? "rank-2" : rank === 3 ? "rank-3" : "rank-other";
     const rankIcon  = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`;
@@ -281,9 +341,9 @@ async function openLeaderboard() {
 
 async function updateLeaderboard() {
   if (!currentUser) return;
-  const state   = loadStatus();
-  const total   = Object.values(state).filter((v) => v === "Done" || v === "Done + Reviewed").length;
-  const name    = currentUser.user_metadata?.display_name || currentUser.email?.split("@")[0] || "Anonymous";
+  const state = loadStatus();
+  const total = Object.values(state).filter((v) => v === "Done" || v === "Done + Reviewed").length;
+  const name  = currentUser.user_metadata?.display_name || currentUser.email?.split("@")[0] || "Anonymous";
   await sb.from("leaderboard").upsert({
     user_id: currentUser.id, display_name: name, papers_done: total,
     updated_at: new Date().toISOString(),
@@ -343,31 +403,24 @@ async function loadAllFromCloud() {
     localStorage.setItem(KEY_STATUS, JSON.stringify(state));
   }
 
-  const { data: settings } = await sb
-    .from("user_settings").select("*")
-    .eq("user_id", currentUser.id).maybeSingle();
-
+  const { data: settings } = await sb.from("user_settings").select("*").eq("user_id", currentUser.id).maybeSingle();
   if (settings) {
     localStorage.setItem(KEY_SETTINGS, JSON.stringify({ subject: settings.subject }));
     const sel = settings.paper_selections || {};
-
     Object.keys(SUBJECT_PAPERS).forEach((subj) => {
       if (Array.isArray(sel[subj])) localStorage.setItem(paperSelKey(subj), JSON.stringify(sel[subj]));
     });
-
     const yearsMap = sel.__yearslist__;
-    if (yearsMap && typeof yearsMap === "object") {
-      Object.entries(yearsMap).forEach(([subj, yrs]) => {
-        localStorage.setItem(yearsSelKey(subj), JSON.stringify(yrs));
-      });
-    }
+    if (yearsMap) Object.entries(yearsMap).forEach(([subj, yrs]) => localStorage.setItem(yearsSelKey(subj), JSON.stringify(yrs)));
+    const seriesMap = sel.__seriesToggles__;
+    if (seriesMap) Object.entries(seriesMap).forEach(([k, v]) => localStorage.setItem(k, JSON.stringify(v)));
   }
 }
 
 // ── Cloud: save status ────────────────────────────────────────────────────────
 async function saveStatusToCloud(key, status) {
   if (!currentUser) return;
-  showToast();
+  showSyncToast();
   const [subject, year, series, paper] = key.split("__");
   await sb.from("paper_status").upsert({
     user_id: currentUser.id, subject, year: parseInt(year,10), series, paper, status,
@@ -395,6 +448,17 @@ async function saveSettingsToCloud() {
     if (raw) try { yearsMap[subj] = JSON.parse(raw); } catch {}
   });
   paperSelections.__yearslist__ = yearsMap;
+
+  // Collect all series toggle keys
+  const seriesToggles = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith("ial-tracker-series-toggle__")) {
+      try { seriesToggles[k] = JSON.parse(localStorage.getItem(k)); } catch {}
+    }
+  }
+  paperSelections.__seriesToggles__ = seriesToggles;
+
   const s = loadSettings();
   await sb.from("user_settings").upsert({
     user_id: currentUser.id, subject: s?.subject || subjectSelect.value,
@@ -484,31 +548,32 @@ pickNoneBtn.addEventListener("click", () => {
 function updateSummary() {
   const counts = STATUS_OPTIONS.reduce((a, v) => ({ ...a, [v]: 0 }), {});
   let total = 0;
-  tracker.querySelectorAll("select.status").forEach((s) => { counts[s.value]++; total++; });
+  tracker.querySelectorAll("select.status").forEach((sel) => {
+    const row    = sel.closest("tr");
+    const series = sel.closest(".series");
+    if (row?.classList.contains("row-hidden")) return;
+    if (series?.classList.contains("series-hidden")) return;
+    counts[sel.value]++; total++;
+  });
   const completed = counts["Done"] + counts["Done + Reviewed"];
   const pct       = total > 0 ? Math.round((completed / total) * 100) : 0;
-
-  const badges = STATUS_OPTIONS.map(
+  const badges    = STATUS_OPTIONS.map(
     (v) => `<span class="badge" data-status="${v}">${v} <strong>${counts[v]}</strong></span>`
   ).join("");
-
-  const bar = `
-    <div class="summary-progress">
-      <div class="summary-progress-track">
-        <div class="summary-progress-fill" style="width:${pct}%"></div>
-      </div>
-      <span class="summary-progress-label">${pct}% complete</span>
-    </div>`;
-
+  const bar = `<div class="summary-progress"><div class="summary-progress-track"><div class="summary-progress-fill" style="width:${pct}%"></div></div><span class="summary-progress-label">${pct}% complete</span></div>`;
   summary.innerHTML = badges + bar;
 }
 
+// ── Year card progress ────────────────────────────────────────────────────────
 function updateYearProgress(card) {
-  const selects = card.querySelectorAll("select.status");
-  const done    = [...selects].filter((s) => s.value === "Done" || s.value === "Done + Reviewed").length;
-  const pct     = selects.length ? Math.round((done / selects.length) * 100) : 0;
-  const fill    = card.querySelector(".year-progress-fill");
-  const label   = card.querySelector(".year-progress-label");
+  const selects = [...card.querySelectorAll("select.status")].filter((sel) => {
+    const series = sel.closest(".series");
+    return series && !series.classList.contains("series-hidden");
+  });
+  const done  = selects.filter((s) => s.value === "Done" || s.value === "Done + Reviewed").length;
+  const pct   = selects.length ? Math.round((done / selects.length) * 100) : 0;
+  const fill  = card.querySelector(".year-progress-fill");
+  const label = card.querySelector(".year-progress-label");
   if (fill)  fill.style.width  = pct + "%";
   if (label) label.textContent = `${done}/${selects.length} done`;
 }
@@ -517,7 +582,7 @@ function updateYearProgress(card) {
 function buildTracker() {
   const subject = subjectSelect.value;
   const papers  = getSelectedPapers();
-  const years   = getCheckedYears().sort((a,b) => b - a); // newest first
+  const years   = getCheckedYears().sort((a,b) => b - a);
   const saved   = loadStatus();
 
   tracker.innerHTML = "";
@@ -536,37 +601,65 @@ function buildTracker() {
   }
 
   years.forEach((year, idx) => {
-    const card       = document.createElement("article");
-    card.className   = "year-card";
+    const toggles = loadSeriesToggle(subject, year);
+    const card    = document.createElement("article");
+    card.className = "year-card";
     card.style.animationDelay = `${idx * 0.05}s`;
 
+    // Header
     const header = document.createElement("div");
     header.className = "year-card-header";
+
+    // Series toggle chips
+    const togglesHtml = SERIES.map((s) => `
+      <button type="button" class="series-toggle${toggles[s] === false ? " disabled" : ""}" data-series="${s}" title="Toggle ${s}">
+        <span class="series-toggle-dot"></span>${s === "October/November" ? "Oct/Nov" : s}
+      </button>`).join("");
+
     header.innerHTML = `
       <h2 class="year-title">${subject} &mdash; <span>${year}</span></h2>
+      <div class="series-toggles">${togglesHtml}</div>
       <div class="year-progress-wrap">
         <span class="year-progress-label">0 done</span>
         <div class="year-progress-bar"><div class="year-progress-fill"></div></div>
       </div>`;
     card.appendChild(header);
 
-    const body     = document.createElement("div");
+    // Wire series toggle chips
+    header.querySelectorAll(".series-toggle").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const s       = btn.dataset.series;
+        const enabled = btn.classList.contains("disabled");
+        btn.classList.toggle("disabled", !enabled);
+        const newToggles = loadSeriesToggle(subject, year);
+        newToggles[s] = enabled;
+        saveSeriesToggle(subject, year, newToggles);
+        const section = card.querySelector(`.series[data-series="${s}"]`);
+        if (section) section.classList.toggle("series-hidden", !enabled);
+        updateYearProgress(card);
+        updateSummary();
+      });
+    });
+
+    // Body
+    const body = document.createElement("div");
     body.className = "year-body";
 
     SERIES.forEach((seriesName) => {
-      const section          = document.createElement("section");
-      section.className      = "series";
+      const isHidden = toggles[seriesName] === false;
+      const section  = document.createElement("section");
+      section.className      = "series" + (isHidden ? " series-hidden" : "");
       section.dataset.series = seriesName;
-      section.innerHTML      = `
+      section.innerHTML = `
         <div class="series-header">
           <span class="series-dot"></span>
           <span class="series-name">${seriesName}</span>
         </div>`;
 
-      const wrap     = document.createElement("div");
+      const wrap  = document.createElement("div");
       wrap.className = "series-table-wrap";
-      const table    = document.createElement("table");
-      const tbody    = document.createElement("tbody");
+      const table = document.createElement("table");
+      const tbody = document.createElement("tbody");
 
       papers.forEach((paper) => {
         const key   = `${subject}__${year}__${seriesName}__${paper}`;
@@ -599,6 +692,8 @@ function buildTracker() {
         sel.dataset.status = sel.value;
         saveStatusLocal();
         debouncedSaveStatus(sel.dataset.key, sel.value);
+        const [, yr, seriesName] = sel.dataset.key.split("__");
+        checkSeriesComplete(card, seriesName, yr, subject);
         updateSummary();
         updateYearProgress(card);
         refreshPaperCounter();
@@ -607,6 +702,10 @@ function buildTracker() {
 
     updateYearProgress(card);
   });
+
+  // Re-apply any active search
+  const q = searchInput.value.trim();
+  if (q) applySearch(q);
 
   saveActiveSubject();
   updateSummary();
