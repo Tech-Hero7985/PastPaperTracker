@@ -1,3 +1,7 @@
+// ── Force login on every page load ───────────────────────────────────────────
+// Wipe the persisted session before Supabase initialises so users always log in fresh
+Object.keys(localStorage).filter(k => k.startsWith("sb-")).forEach(k => localStorage.removeItem(k));
+
 // ── Supabase ──────────────────────────────────────────────────────────────────
 const { createClient } = supabase;
 const sb = createClient(
