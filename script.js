@@ -5,84 +5,9 @@ const sb = createClient(
   "sb_publishable_gtEiSZVEWFl_FAFFBG_XjQ_1MchKFyH"
 );
 
-let currentUser          = null;
-let settingsTimer        = null;
-let statusSaveTimer      = null;
-let initializedForUserId = null;
-let appBootstrapped      = false;
-
-// ── Google OAuth ─────────────────────────────────────────────────────────────
-document.getElementById("google-btn").addEventListener("click", async () => {
-  const { error } = await sb.auth.signInWithOAuth({
-    provider: "google",
-    options:  { redirectTo: "https://wadhwanimedia.me/" },
-  });
-  if (error) alert("Google sign-in failed: " + error.message);
-});
-
-// ── Password reset ────────────────────────────────────────────────────────────
-document.getElementById("forgot-link").addEventListener("click", () => {
-  document.getElementById("login-form").style.display   = "none";
-  document.getElementById("reset-form").style.display   = "flex";
-  document.getElementById("auth-error").style.display   = "none";
-  document.getElementById("auth-success").style.display = "none";
-});
-
-document.getElementById("back-to-login").addEventListener("click", () => {
-  document.getElementById("reset-form").style.display  = "none";
-  document.getElementById("login-form").style.display  = "flex";
-  document.getElementById("auth-error").style.display  = "none";
-  document.getElementById("auth-success").style.display = "none";
-});
-
-document.getElementById("reset-btn").addEventListener("click", async () => {
-  const email = document.getElementById("reset-email").value.trim();
-  if (!email) {
-    document.getElementById("auth-error").textContent   = "Please enter your email.";
-    document.getElementById("auth-error").style.display = "block";
-    return;
-  }
-  document.getElementById("reset-btn").disabled    = true;
-  document.getElementById("reset-btn").textContent = "Sending…";
-  const { error } = await sb.auth.resetPasswordForEmail(email, {
-    redirectTo: "https://wadhwanimedia.me/",
-  });
-  document.getElementById("reset-btn").disabled    = false;
-  document.getElementById("reset-btn").textContent = "Send Reset Link";
-  if (error) {
-    document.getElementById("auth-error").textContent   = error.message;
-    document.getElementById("auth-error").style.display = "block";
-  } else {
-    document.getElementById("auth-error").style.display   = "none";
-    document.getElementById("auth-success").textContent   = "Reset link sent! Check your inbox.";
-    document.getElementById("auth-success").style.display = "block";
-  }
-});
-
-// ── Set new password (after clicking reset link) ──────────────────────────────
-document.getElementById("new-password-btn").addEventListener("click", async () => {
-  const newPass = document.getElementById("new-password-input").value;
-  if (!newPass || newPass.length < 6) {
-    document.getElementById("new-password-error").textContent   = "Password must be at least 6 characters.";
-    document.getElementById("new-password-error").style.display = "block";
-    return;
-  }
-  document.getElementById("new-password-btn").disabled    = true;
-  document.getElementById("new-password-btn").textContent = "Updating…";
-  const { error } = await sb.auth.updateUser({ password: newPass });
-  document.getElementById("new-password-btn").disabled    = false;
-  document.getElementById("new-password-btn").textContent = "Update Password";
-  if (error) {
-    document.getElementById("new-password-error").textContent   = error.message;
-    document.getElementById("new-password-error").style.display = "block";
-  } else {
-    document.getElementById("new-password-success").textContent   = "Password updated! Logging you in…";
-    document.getElementById("new-password-success").style.display = "block";
-    setTimeout(() => {
-      document.getElementById("new-password-overlay").style.display = "none";
-    }, 1500);
-  }
-});
+let currentUser   = null;
+let settingsTimer = null;
+let statusSaveTimer = null;
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 const SUBJECT_PAPERS = {
@@ -137,6 +62,15 @@ const lbList          = document.getElementById("lb-list");
 const hamburger       = document.getElementById("hamburger");
 const settingsPanel   = document.getElementById("settings-panel");
 
+// ── Loading spinner ───────────────────────────────────────────────────────────
+// Shown while auth resolves on page load — hides the flash of broken UI
+const loader = document.createElement("div");
+loader.id        = "auth-loader";
+loader.innerHTML = `<span class="loader-spinner"></span>`;
+document.body.appendChild(loader);
+
+function hideLoader() { loader.style.display = "none"; }
+
 // ── Toasts ────────────────────────────────────────────────────────────────────
 const syncToast = document.createElement("div");
 syncToast.className = "sync-toast";
@@ -160,7 +94,7 @@ function showCelebration(msg) {
   celebrateTimer = setTimeout(() => celebrateToast.classList.remove("visible"), 3000);
 }
 
-// ── Hamburger (mobile) ────────────────────────────────────────────────────────
+// ── Hamburger ────────────────────────────────────────────────────────────────
 hamburger.addEventListener("click", () => {
   hamburger.classList.toggle("open");
   settingsPanel.classList.toggle("open");
@@ -172,7 +106,6 @@ searchInput.addEventListener("input", () => {
   searchClear.style.display = q ? "block" : "none";
   applySearch(q);
 });
-
 searchClear.addEventListener("click", () => {
   searchInput.value = "";
   searchClear.style.display = "none";
@@ -184,9 +117,8 @@ function applySearch(q) {
   tracker.querySelectorAll(".year-card").forEach((card) => {
     let cardHasVisible = false;
     card.querySelectorAll("tbody tr").forEach((row) => {
-      // Don't unhide rows belonging to a hidden series
       const series = row.closest(".series");
-      if (series && series.classList.contains("series-hidden")) return;
+      if (series?.classList.contains("series-hidden")) return;
       const name = row.querySelector(".paper-name")?.textContent.toLowerCase() || "";
       const show = !term || name.includes(term);
       row.classList.toggle("row-hidden", !show);
@@ -289,13 +221,12 @@ function saveYearSelection(subject, years) {
   debouncedSaveSettings();
 }
 
-// ── Series toggles per year ───────────────────────────────────────────────────
+// ── Series toggles ────────────────────────────────────────────────────────────
 function loadSeriesToggle(subject, year) {
   try {
     const raw = localStorage.getItem(seriesToggleKey(subject, year));
     if (raw) return JSON.parse(raw);
   } catch {}
-  // Default: all series enabled
   return { "January": true, "May/June": true, "October/November": true };
 }
 
@@ -305,7 +236,7 @@ function saveSeriesToggle(subject, year, toggles) {
 }
 
 // ── Series complete check ─────────────────────────────────────────────────────
-function checkSeriesComplete(card, seriesName, year, subject) {
+function checkSeriesComplete(card, seriesName, year) {
   const section = card.querySelector(`.series[data-series="${seriesName}"]`);
   if (!section || section.classList.contains("series-hidden")) return;
   const selects = [...section.querySelectorAll("select.status")];
@@ -335,6 +266,16 @@ function setBtnLoading(btn, loading, text) {
   btn.textContent = loading ? "Please wait…" : text;
 }
 
+// Google OAuth
+document.getElementById("google-btn").addEventListener("click", async () => {
+  const { error } = await sb.auth.signInWithOAuth({
+    provider: "google",
+    options:  { redirectTo: "https://wadhwanimedia.me/" },
+  });
+  if (error) showAuthError("Google sign-in failed: " + error.message);
+});
+
+// Email login
 loginBtn.addEventListener("click", async () => {
   const email    = document.getElementById("login-email").value.trim();
   const password = document.getElementById("login-password").value;
@@ -351,6 +292,7 @@ loginBtn.addEventListener("click", async () => {
   });
 });
 
+// Signup
 signupBtn.addEventListener("click", async () => {
   const name     = document.getElementById("signup-name").value.trim();
   const email    = document.getElementById("signup-email").value.trim();
@@ -372,6 +314,55 @@ signupBtn.addEventListener("click", async () => {
   }
 });
 
+// Forgot password
+document.getElementById("forgot-link").addEventListener("click", () => {
+  loginForm.style.display  = "none";
+  document.getElementById("reset-form").style.display = "flex";
+  hideAuthMsg();
+});
+
+document.getElementById("back-to-login").addEventListener("click", () => {
+  document.getElementById("reset-form").style.display = "none";
+  loginForm.style.display = "flex";
+  hideAuthMsg();
+});
+
+document.getElementById("reset-btn").addEventListener("click", async () => {
+  const email = document.getElementById("reset-email").value.trim();
+  if (!email) return showAuthError("Please enter your email.");
+  setBtnLoading(document.getElementById("reset-btn"), true, "Send Reset Link");
+  const { error } = await sb.auth.resetPasswordForEmail(email, {
+    redirectTo: "https://wadhwanimedia.me/",
+  });
+  setBtnLoading(document.getElementById("reset-btn"), false, "Send Reset Link");
+  if (error) showAuthError(error.message);
+  else showAuthSuccess("Reset link sent! Check your inbox.");
+});
+
+// Set new password
+document.getElementById("new-password-btn").addEventListener("click", async () => {
+  const newPass = document.getElementById("new-password-input").value;
+  if (!newPass || newPass.length < 6) {
+    document.getElementById("new-password-error").textContent   = "Password must be at least 6 characters.";
+    document.getElementById("new-password-error").style.display = "block";
+    return;
+  }
+  setBtnLoading(document.getElementById("new-password-btn"), true, "Update Password");
+  const { error } = await sb.auth.updateUser({ password: newPass });
+  setBtnLoading(document.getElementById("new-password-btn"), false, "Update Password");
+  if (error) {
+    document.getElementById("new-password-error").textContent   = error.message;
+    document.getElementById("new-password-error").style.display = "block";
+  } else {
+    document.getElementById("new-password-success").textContent   = "Password updated! Logging you in…";
+    document.getElementById("new-password-success").style.display = "block";
+    setTimeout(() => {
+      document.getElementById("new-password-overlay").style.display = "none";
+    }, 1500);
+  }
+});
+
+// Logout
 logoutBtn.addEventListener("click", async () => {
   await sb.auth.signOut();
   localStorage.removeItem(KEY_STATUS);
@@ -382,6 +373,151 @@ logoutBtn.addEventListener("click", async () => {
   });
 });
 
+// ── App show/hide ─────────────────────────────────────────────────────────────
+function showApp() {
+  hideLoader();
+  authOverlay.style.display = "none";
+  appEl.style.display       = "block";
+}
+
+function showAuth() {
+  hideLoader();
+  authOverlay.style.display = "flex";
+  appEl.style.display       = "none";
+}
+
+// ── THE AUTH HANDLER — single source of truth ─────────────────────────────────
+// We rely ONLY on onAuthStateChange. The INITIAL_SESSION event fires on every
+// page load with the persisted session (or null). No IIFE, no race condition.
+sb.auth.onAuthStateChange(async (event, session) => {
+
+  // Password reset link clicked — show set-new-password modal
+  if (event === "PASSWORD_RECOVERY") {
+    hideLoader();
+    authOverlay.style.display              = "none";
+    document.getElementById("new-password-overlay").style.display = "flex";
+    return;
+  }
+
+  // User is logged in (initial load with session OR fresh login)
+  if (session?.user) {
+    // Avoid re-initialising on token refresh or duplicate SIGNED_IN events
+    if (currentUser?.id === session.user.id && appEl.style.display === "block") return;
+
+    currentUser = session.user;
+    userEmailEl.textContent  = currentUser.email || "";
+    userAvatarEl.textContent = (
+      currentUser.user_metadata?.display_name?.[0] ||
+      currentUser.email?.[0] || "U"
+    ).toUpperCase();
+
+    // Load cloud data first, THEN show the app — no broken flash
+    await loadAllFromCloud();
+    showApp();
+    initApp();
+    return;
+  }
+
+  // No session — show login
+  showAuth();
+});
+
+// ── Cloud: load ───────────────────────────────────────────────────────────────
+async function loadAllFromCloud() {
+  const { data: statuses } = await sb.from("paper_status").select("*");
+  if (statuses) {
+    const state = {};
+    statuses.forEach((row) => {
+      state[`${row.subject}__${row.year}__${row.series}__${row.paper}`] = row.status;
+    });
+    localStorage.setItem(KEY_STATUS, JSON.stringify(state));
+  }
+
+  const { data: settings } = await sb
+    .from("user_settings").select("*")
+    .eq("user_id", currentUser.id).maybeSingle();
+
+  if (settings) {
+    localStorage.setItem(KEY_SETTINGS, JSON.stringify({ subject: settings.subject }));
+    const sel = settings.paper_selections || {};
+
+    Object.keys(SUBJECT_PAPERS).forEach((subj) => {
+      if (Array.isArray(sel[subj])) localStorage.setItem(paperSelKey(subj), JSON.stringify(sel[subj]));
+    });
+
+    const yearsMap = sel.__yearslist__;
+    if (yearsMap) {
+      Object.entries(yearsMap).forEach(([subj, yrs]) => {
+        localStorage.setItem(yearsSelKey(subj), JSON.stringify(yrs));
+      });
+    }
+
+    const seriesToggles = sel.__seriesToggles__;
+    if (seriesToggles) {
+      Object.entries(seriesToggles).forEach(([k, v]) => {
+        localStorage.setItem(k, JSON.stringify(v));
+      });
+    }
+  }
+}
+
+// ── Cloud: save status ────────────────────────────────────────────────────────
+async function saveStatusToCloud(key, status) {
+  if (!currentUser) return;
+  showSyncToast();
+  const [subject, year, series, paper] = key.split("__");
+  const { error } = await sb.from("paper_status").upsert({
+    user_id: currentUser.id, subject, year: parseInt(year,10), series, paper, status,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "user_id,subject,year,series,paper" });
+  if (error) console.error("saveStatusToCloud:", error);
+  updateLeaderboard();
+}
+
+function debouncedSaveStatus(key, status) {
+  clearTimeout(statusSaveTimer);
+  statusSaveTimer = setTimeout(() => saveStatusToCloud(key, status), 300);
+}
+
+// ── Cloud: save settings ──────────────────────────────────────────────────────
+async function saveSettingsToCloud() {
+  if (!currentUser) return;
+  const paperSelections = {};
+  Object.keys(SUBJECT_PAPERS).forEach((subj) => {
+    const raw = localStorage.getItem(paperSelKey(subj));
+    if (raw) try { paperSelections[subj] = JSON.parse(raw); } catch {}
+  });
+  const yearsMap = {};
+  Object.keys(SUBJECT_PAPERS).forEach((subj) => {
+    const raw = localStorage.getItem(yearsSelKey(subj));
+    if (raw) try { yearsMap[subj] = JSON.parse(raw); } catch {}
+  });
+  paperSelections.__yearslist__ = yearsMap;
+
+  const seriesToggles = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k?.startsWith("ial-tracker-series-toggle__")) {
+      try { seriesToggles[k] = JSON.parse(localStorage.getItem(k)); } catch {}
+    }
+  }
+  paperSelections.__seriesToggles__ = seriesToggles;
+
+  const s = loadSettings();
+  await sb.from("user_settings").upsert({
+    user_id: currentUser.id,
+    subject: s?.subject || subjectSelect.value,
+    years: 0,
+    paper_selections: paperSelections,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "user_id" });
+}
+
+function debouncedSaveSettings() {
+  clearTimeout(settingsTimer);
+  settingsTimer = setTimeout(saveSettingsToCloud, 1200);
+}
+
 // ── Leaderboard ───────────────────────────────────────────────────────────────
 lbBtn.addEventListener("click", openLeaderboard);
 lbClose.addEventListener("click", () => { lbOverlay.style.display = "none"; });
@@ -390,14 +526,16 @@ lbOverlay.addEventListener("click", (e) => { if (e.target === lbOverlay) lbOverl
 async function openLeaderboard() {
   lbOverlay.style.display = "flex";
   lbList.innerHTML = `<div class="lb-loading">Loading…</div>`;
-  const { data, error } = await sb.from("leaderboard").select("user_id, display_name, papers_done").order("papers_done", { ascending: false }).limit(20);
+  const { data, error } = await sb
+    .from("leaderboard").select("user_id, display_name, papers_done")
+    .order("papers_done", { ascending: false }).limit(20);
   if (error || !data) { lbList.innerHTML = `<div class="lb-loading">Could not load leaderboard.</div>`; return; }
   if (data.length === 0) { lbList.innerHTML = `<div class="lb-loading">No entries yet — be the first!</div>`; return; }
   lbList.innerHTML = "";
   data.forEach((row, i) => {
-    const rank = i + 1;
-    const isMe = row.user_id === currentUser?.id;
-    const div  = document.createElement("div");
+    const rank  = i + 1;
+    const isMe  = row.user_id === currentUser?.id;
+    const div   = document.createElement("div");
     div.className = "lb-row" + (isMe ? " lb-me" : "");
     const rankClass = rank === 1 ? "rank-1" : rank === 2 ? "rank-2" : rank === 3 ? "rank-3" : "rank-other";
     const rankIcon  = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`;
@@ -425,126 +563,6 @@ function refreshPaperCounter() {
   const state = loadStatus();
   const total = Object.values(state).filter((v) => v === "Done" || v === "Done + Reviewed").length;
   if (paperCounterVal) paperCounterVal.textContent = total;
-}
-
-// ── App show/hide ─────────────────────────────────────────────────────────────
-function showApp()  { authOverlay.style.display = "none"; appEl.style.display = "block"; }
-function showAuth() { authOverlay.style.display = "flex"; appEl.style.display = "none"; }
-
-// ── Auth handlers ─────────────────────────────────────────────────────────────
-async function handleSignedInUser(user, event = "INITIAL") {
-  currentUser = user;
-  if (initializedForUserId === currentUser.id && appBootstrapped && event !== "SIGNED_IN") return;
-  initializedForUserId     = currentUser.id;
-  userEmailEl.textContent  = currentUser.email || "";
-  userAvatarEl.textContent = (currentUser.user_metadata?.display_name?.[0] || currentUser.email?.[0] || "U").toUpperCase();
-  showApp();
-  await loadAllFromCloud();
-  initApp();
-  appBootstrapped = true;
-}
-
-function handleSignedOutUser() {
-  currentUser = null; initializedForUserId = null; appBootstrapped = false;
-  showAuth(); tracker.innerHTML = ""; summary.innerHTML = "";
-}
-
-(async function bootstrapAuth() {
-  const { data, error } = await sb.auth.getSession();
-  if (error) { handleSignedOutUser(); return; }
-  const user = data?.session?.user;
-  if (user) await handleSignedInUser(user, "INITIAL");
-  else      handleSignedOutUser();
-})();
-
-sb.auth.onAuthStateChange(async (event, session) => {
-  if (event === "PASSWORD_RECOVERY") {
-    // Hide auth overlay, show the set-new-password modal
-    document.getElementById("auth-overlay").style.display        = "none";
-    document.getElementById("new-password-overlay").style.display = "flex";
-    return;
-  }
-  if (session?.user) await handleSignedInUser(session.user, event);
-  else               handleSignedOutUser();
-});
-
-// ── Cloud: load ───────────────────────────────────────────────────────────────
-async function loadAllFromCloud() {
-  const { data: statuses } = await sb.from("paper_status").select("*");
-  if (statuses) {
-    const state = {};
-    statuses.forEach((row) => {
-      state[`${row.subject}__${row.year}__${row.series}__${row.paper}`] = row.status;
-    });
-    localStorage.setItem(KEY_STATUS, JSON.stringify(state));
-  }
-
-  const { data: settings } = await sb.from("user_settings").select("*").eq("user_id", currentUser.id).maybeSingle();
-  if (settings) {
-    localStorage.setItem(KEY_SETTINGS, JSON.stringify({ subject: settings.subject }));
-    const sel = settings.paper_selections || {};
-    Object.keys(SUBJECT_PAPERS).forEach((subj) => {
-      if (Array.isArray(sel[subj])) localStorage.setItem(paperSelKey(subj), JSON.stringify(sel[subj]));
-    });
-    const yearsMap = sel.__yearslist__;
-    if (yearsMap) Object.entries(yearsMap).forEach(([subj, yrs]) => localStorage.setItem(yearsSelKey(subj), JSON.stringify(yrs)));
-    const seriesMap = sel.__seriesToggles__;
-    if (seriesMap) Object.entries(seriesMap).forEach(([k, v]) => localStorage.setItem(k, JSON.stringify(v)));
-  }
-}
-
-// ── Cloud: save status ────────────────────────────────────────────────────────
-async function saveStatusToCloud(key, status) {
-  if (!currentUser) return;
-  showSyncToast();
-  const [subject, year, series, paper] = key.split("__");
-  await sb.from("paper_status").upsert({
-    user_id: currentUser.id, subject, year: parseInt(year,10), series, paper, status,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: "user_id,subject,year,series,paper" });
-  updateLeaderboard();
-}
-
-function debouncedSaveStatus(key, status) {
-  clearTimeout(statusSaveTimer);
-  statusSaveTimer = setTimeout(() => saveStatusToCloud(key, status), 300);
-}
-
-// ── Cloud: save settings ──────────────────────────────────────────────────────
-async function saveSettingsToCloud() {
-  if (!currentUser) return;
-  const paperSelections = {};
-  Object.keys(SUBJECT_PAPERS).forEach((subj) => {
-    const raw = localStorage.getItem(paperSelKey(subj));
-    if (raw) try { paperSelections[subj] = JSON.parse(raw); } catch {}
-  });
-  const yearsMap = {};
-  Object.keys(SUBJECT_PAPERS).forEach((subj) => {
-    const raw = localStorage.getItem(yearsSelKey(subj));
-    if (raw) try { yearsMap[subj] = JSON.parse(raw); } catch {}
-  });
-  paperSelections.__yearslist__ = yearsMap;
-
-  // Collect all series toggle keys
-  const seriesToggles = {};
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (k && k.startsWith("ial-tracker-series-toggle__")) {
-      try { seriesToggles[k] = JSON.parse(localStorage.getItem(k)); } catch {}
-    }
-  }
-  paperSelections.__seriesToggles__ = seriesToggles;
-
-  const s = loadSettings();
-  await sb.from("user_settings").upsert({
-    user_id: currentUser.id, subject: s?.subject || subjectSelect.value,
-    years: 0, paper_selections: paperSelections, updated_at: new Date().toISOString(),
-  }, { onConflict: "user_id" });
-}
-
-function debouncedSaveSettings() {
-  clearTimeout(settingsTimer);
-  settingsTimer = setTimeout(saveSettingsToCloud, 1200);
 }
 
 // ── localStorage helpers ──────────────────────────────────────────────────────
@@ -593,11 +611,11 @@ function buildChips(subject) {
   const saved = loadPaperSelection(subject);
   chipGrid.innerHTML = "";
   SUBJECT_PAPERS[subject].forEach((paper) => {
-    const chip         = document.createElement("button");
-    chip.type          = "button";
-    chip.className     = "chip" + (saved.includes(paper) ? " active" : "");
+    const chip = document.createElement("button");
+    chip.type  = "button";
+    chip.className   = "chip" + (saved.includes(paper) ? " active" : "");
     chip.dataset.paper = paper;
-    chip.innerHTML     = `<span class="chip-check">✓</span>${paper}`;
+    chip.innerHTML   = `<span class="chip-check">✓</span>${paper}`;
     chip.addEventListener("click", () => {
       chip.classList.toggle("active");
       savePaperSelection(subject, getSelectedPapers());
@@ -632,11 +650,20 @@ function updateSummary() {
     counts[sel.value]++; total++;
   });
   const completed = counts["Done"] + counts["Done + Reviewed"];
-  const pct       = total > 0 ? Math.round((completed / total) * 100) : 0;
-  const badges    = STATUS_OPTIONS.map(
+  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+  const badges = STATUS_OPTIONS.map(
     (v) => `<span class="badge" data-status="${v}">${v} <strong>${counts[v]}</strong></span>`
   ).join("");
-  const bar = `<div class="summary-progress"><div class="summary-progress-track"><div class="summary-progress-fill" style="width:${pct}%"></div></div><span class="summary-progress-label">${pct}% complete</span></div>`;
+
+  const bar = `
+    <div class="summary-progress">
+      <div class="summary-progress-track">
+        <div class="summary-progress-fill" style="width:${pct}%"></div>
+      </div>
+      <span class="summary-progress-label">${pct}% complete</span>
+    </div>`;
+
   summary.innerHTML = badges + bar;
 }
 
@@ -682,11 +709,8 @@ function buildTracker() {
     card.className = "year-card";
     card.style.animationDelay = `${idx * 0.05}s`;
 
-    // Header
     const header = document.createElement("div");
     header.className = "year-card-header";
-
-    // Series toggle chips
     const togglesHtml = SERIES.map((s) => `
       <button type="button" class="series-toggle${toggles[s] === false ? " disabled" : ""}" data-series="${s}" title="Toggle ${s}">
         <span class="series-toggle-dot"></span>${s === "October/November" ? "Oct/Nov" : s}
@@ -701,7 +725,6 @@ function buildTracker() {
       </div>`;
     card.appendChild(header);
 
-    // Wire series toggle chips
     header.querySelectorAll(".series-toggle").forEach((btn) => {
       btn.addEventListener("click", () => {
         const s       = btn.dataset.series;
@@ -717,7 +740,6 @@ function buildTracker() {
       });
     });
 
-    // Body
     const body = document.createElement("div");
     body.className = "year-body";
 
@@ -768,8 +790,8 @@ function buildTracker() {
         sel.dataset.status = sel.value;
         saveStatusLocal();
         debouncedSaveStatus(sel.dataset.key, sel.value);
-        const [, yr, seriesName] = sel.dataset.key.split("__");
-        checkSeriesComplete(card, seriesName, yr, subject);
+        const [,yr, seriesName] = sel.dataset.key.split("__");
+        checkSeriesComplete(card, seriesName, yr);
         updateSummary();
         updateYearProgress(card);
         refreshPaperCounter();
@@ -779,7 +801,6 @@ function buildTracker() {
     updateYearProgress(card);
   });
 
-  // Re-apply any active search
   const q = searchInput.value.trim();
   if (q) applySearch(q);
 
@@ -795,7 +816,7 @@ function onSubjectChange() {
   buildTracker();
 }
 
-// ── App init ──────────────────────────────────────────────────────────────────
+// ── App init — called once after cloud data is loaded ─────────────────────────
 function initApp() {
   if (subjectSelect.children.length === 0) {
     Object.keys(SUBJECT_PAPERS).forEach((subj) => {
