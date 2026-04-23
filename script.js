@@ -71,6 +71,14 @@ document.body.appendChild(loader);
 
 function hideLoader() { loader.style.display = "none"; }
 
+// Safety net — if auth hasn't resolved in 6s, show login instead of spinning forever
+setTimeout(() => {
+  if (loader.style.display !== "none") {
+    console.warn("Auth timeout — showing login screen");
+    showAuth();
+  }
+}, 6000);
+
 // ── Toasts ────────────────────────────────────────────────────────────────────
 const syncToast = document.createElement("div");
 syncToast.className = "sync-toast";
