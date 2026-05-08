@@ -32,6 +32,29 @@ const paperSelKey     = (s)    => `ial-tracker-papers__${s}`;
 const yearsSelKey     = (s)    => `ial-tracker-yearslist__${s}`;
 const seriesToggleKey = (s, y) => `ial-tracker-series-toggle__${s}__${y}`;
 
+
+// ── PMT URL generator (Mathematics only) ─────────────────────────────────────
+const PMT_MATHS_CATEGORY = {
+  "P1": "Pure", "P2": "Pure", "P3": "Pure", "P4": "Pure",
+  "M1": "Mechanics", "M2": "Mechanics",
+  "S1": "Statistics", "S2": "Statistics",
+};
+
+const PMT_SERIES_MAP = {
+  "January":          "January",
+  "May/June":         "June",
+  "October/November": "October",
+};
+
+function getPMTUrl(subject, paper, series, year, type = "QP") {
+  if (subject !== "Mathematics") return null;
+  const category  = PMT_MATHS_CATEGORY[paper];
+  const pmtSeries = PMT_SERIES_MAP[series];
+  if (!category || !pmtSeries) return null;
+  const filename = `${pmtSeries} ${year} ${type}.pdf`;
+  return `https://pmt.physicsandmathstutor.com/download/Maths/A-level/Papers/Edexcel-IAL/${category}/${paper}/${type}/${encodeURIComponent(filename)}`;
+}
+
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const authOverlay     = document.getElementById("auth-overlay");
 const appEl           = document.getElementById("app");
@@ -774,6 +797,13 @@ function buildTracker() {
       papers.forEach((paper) => {
         const key   = `${subject}__${year}__${seriesName}__${paper}`;
         const value = saved[key] || "Not Done";
+        const qpUrl = getPMTUrl(subject, paper, seriesName, year, "QP");
+        const msUrl = getPMTUrl(subject, paper, seriesName, year, "MS");
+        const linkHtml = qpUrl ? `
+          <div class="pmt-links">
+            <a href="${qpUrl}" target="_blank" rel="noopener" class="pmt-link pmt-qp" title="Question Paper on PMT">QP</a>
+            <a href="${msUrl}" target="_blank" rel="noopener" class="pmt-link pmt-ms" title="Mark Scheme on PMT">MS</a>
+          </div>` : "";
         const tr    = document.createElement("tr");
         tr.innerHTML = `
           <td class="paper-name">${paper}</td>
@@ -784,6 +814,7 @@ function buildTracker() {
                 `<option value="${s}"${s === value ? " selected" : ""}>${s}</option>`
               ).join("")}
             </select>
+            ${linkHtml}
           </td>`;
         tbody.appendChild(tr);
       });
