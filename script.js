@@ -19,6 +19,8 @@ const SUBJECT_PAPERS = {
   Physics:     ["Unit 1","Unit 2","Unit 3","Unit 4","Unit 5","Unit 6"],
   Chemistry:   ["Unit 1","Unit 2","Unit 3","Unit 4","Unit 5","Unit 6"],
   Biology:     ["Unit 1","Unit 2","Unit 3","Unit 4","Unit 5","Unit 6"],
+  Business:    ["Unit 1","Unit 2","Unit 3","Unit 4"],
+  Economics:   ["Unit 1","Unit 2","Unit 3","Unit 4"],
 };
 const SERIES         = ["January","May/June","October/November"];
 const STATUS_OPTIONS = ["Not Done","In Progress","Done","Done + Reviewed"];
