@@ -1,5 +1,4 @@
 // ── Force login on every page load ───────────────────────────────────────────
-// Wipe the persisted session before Supabase initialises so users always log in fresh
 Object.keys(localStorage).filter(k => k.startsWith("sb-")).forEach(k => localStorage.removeItem(k));
 
 // ── Supabase ──────────────────────────────────────────────────────────────────
@@ -9,9 +8,10 @@ const sb = createClient(
   "sb_publishable_gtEiSZVEWFl_FAFFBG_XjQ_1MchKFyH"
 );
 
-let currentUser   = null;
-let settingsTimer = null;
-let statusSaveTimer = null;
+let currentUser      = null;
+let settingsTimer    = null;
+let statusSaveTimer  = null;
+let appInitialized   = false;
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 const SUBJECT_PAPERS = {
@@ -22,6 +22,7 @@ const SUBJECT_PAPERS = {
   Business:    ["Unit 1","Unit 2","Unit 3","Unit 4"],
   Economics:   ["Unit 1","Unit 2","Unit 3","Unit 4"],
 };
+
 const SERIES         = ["January","May/June","October/November"];
 const STATUS_OPTIONS = ["Not Done","In Progress","Done","Done + Reviewed"];
 const THIS_YEAR      = new Date().getFullYear();
@@ -33,29 +34,6 @@ const KEY_SETTINGS    = "ial-tracker-settings";
 const paperSelKey     = (s)    => `ial-tracker-papers__${s}`;
 const yearsSelKey     = (s)    => `ial-tracker-yearslist__${s}`;
 const seriesToggleKey = (s, y) => `ial-tracker-series-toggle__${s}__${y}`;
-
-
-// ── PMT URL generator (Mathematics only) ─────────────────────────────────────
-const PMT_MATHS_CATEGORY = {
-  "P1": "Pure", "P2": "Pure", "P3": "Pure", "P4": "Pure",
-  "M1": "Mechanics", "M2": "Mechanics",
-  "S1": "Statistics", "S2": "Statistics",
-};
-
-const PMT_SERIES_MAP = {
-  "January":          "January",
-  "May/June":         "June",
-  "October/November": "October",
-};
-
-function getPMTUrl(subject, paper, series, year, type = "QP") {
-  if (subject !== "Mathematics") return null;
-  const category  = PMT_MATHS_CATEGORY[paper];
-  const pmtSeries = PMT_SERIES_MAP[series];
-  if (!category || !pmtSeries) return null;
-  const filename = `${pmtSeries} ${year} ${type}.pdf`;
-  return `https://pmt.physicsandmathstutor.com/download/Maths/A-level/Papers/Edexcel-IAL/${category}/${paper}/${type}/${encodeURIComponent(filename)}`;
-}
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const authOverlay     = document.getElementById("auth-overlay");
@@ -91,23 +69,6 @@ const lbList          = document.getElementById("lb-list");
 const hamburger       = document.getElementById("hamburger");
 const settingsPanel   = document.getElementById("settings-panel");
 
-// ── Loading spinner ───────────────────────────────────────────────────────────
-// Shown while auth resolves on page load — hides the flash of broken UI
-const loader = document.createElement("div");
-loader.id        = "auth-loader";
-loader.innerHTML = `<span class="loader-spinner"></span>`;
-document.body.appendChild(loader);
-
-function hideLoader() { loader.style.display = "none"; }
-
-// Safety net — if auth hasn't resolved in 6s, show login instead of spinning forever
-setTimeout(() => {
-  if (loader.style.display !== "none") {
-    console.warn("Auth timeout — showing login screen");
-    showAuth();
-  }
-}, 6000);
-
 // ── Toasts ────────────────────────────────────────────────────────────────────
 const syncToast = document.createElement("div");
 syncToast.className = "sync-toast";
@@ -131,7 +92,7 @@ function showCelebration(msg) {
   celebrateTimer = setTimeout(() => celebrateToast.classList.remove("visible"), 3000);
 }
 
-// ── Hamburger ────────────────────────────────────────────────────────────────
+// ── Hamburger ─────────────────────────────────────────────────────────────────
 hamburger.addEventListener("click", () => {
   hamburger.classList.toggle("open");
   settingsPanel.classList.toggle("open");
@@ -299,7 +260,7 @@ function showAuthSuccess(msg) { authSuccess.textContent = msg; authSuccess.style
 function hideAuthMsg()        { authError.style.display = "none"; authSuccess.style.display = "none"; }
 
 function setBtnLoading(btn, loading, text) {
-  btn.disabled = loading;
+  btn.disabled    = loading;
   btn.textContent = loading ? "Please wait…" : text;
 }
 
@@ -353,24 +314,20 @@ signupBtn.addEventListener("click", async () => {
 
 // Forgot password
 document.getElementById("forgot-link").addEventListener("click", () => {
-  loginForm.style.display  = "none";
+  loginForm.style.display = "none";
   document.getElementById("reset-form").style.display = "flex";
   hideAuthMsg();
 });
-
 document.getElementById("back-to-login").addEventListener("click", () => {
   document.getElementById("reset-form").style.display = "none";
   loginForm.style.display = "flex";
   hideAuthMsg();
 });
-
 document.getElementById("reset-btn").addEventListener("click", async () => {
   const email = document.getElementById("reset-email").value.trim();
   if (!email) return showAuthError("Please enter your email.");
   setBtnLoading(document.getElementById("reset-btn"), true, "Send Reset Link");
-  const { error } = await sb.auth.resetPasswordForEmail(email, {
-    redirectTo: "https://wadhwanimedia.me/",
-  });
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: "https://wadhwanimedia.me/" });
   setBtnLoading(document.getElementById("reset-btn"), false, "Send Reset Link");
   if (error) showAuthError(error.message);
   else showAuthSuccess("Reset link sent! Check your inbox.");
@@ -393,9 +350,7 @@ document.getElementById("new-password-btn").addEventListener("click", async () =
   } else {
     document.getElementById("new-password-success").textContent   = "Password updated! Logging you in…";
     document.getElementById("new-password-success").style.display = "block";
-    setTimeout(() => {
-      document.getElementById("new-password-overlay").style.display = "none";
-    }, 1500);
+    setTimeout(() => { document.getElementById("new-password-overlay").style.display = "none"; }, 1500);
   }
 });
 
@@ -411,52 +366,31 @@ logoutBtn.addEventListener("click", async () => {
 });
 
 // ── App show/hide ─────────────────────────────────────────────────────────────
-function showApp() {
-  hideLoader();
-  authOverlay.style.display = "none";
-  appEl.style.display       = "block";
-}
+function showApp()  { authOverlay.style.display = "none"; appEl.style.display = "block"; }
+function showAuth() { authOverlay.style.display = "flex"; appEl.style.display = "none"; }
 
-function showAuth() {
-  hideLoader();
-  authOverlay.style.display = "flex";
-  appEl.style.display       = "none";
-}
-
-// ── THE AUTH HANDLER — single source of truth ─────────────────────────────────
-// We rely ONLY on onAuthStateChange. The INITIAL_SESSION event fires on every
-// page load with the persisted session (or null). No IIFE, no race condition.
+// ── Auth — single handler ─────────────────────────────────────────────────────
 sb.auth.onAuthStateChange(async (event, session) => {
-
-  // Password reset link clicked — show set-new-password modal
   if (event === "PASSWORD_RECOVERY") {
-    hideLoader();
-    authOverlay.style.display              = "none";
+    authOverlay.style.display = "none";
     document.getElementById("new-password-overlay").style.display = "flex";
     return;
   }
-
-  // User is logged in (initial load with session OR fresh login)
   if (session?.user) {
-    // Avoid re-initialising on token refresh or duplicate SIGNED_IN events
     if (currentUser?.id === session.user.id && appEl.style.display === "block") return;
-
     currentUser = session.user;
     userEmailEl.textContent  = currentUser.email || "";
-    userAvatarEl.textContent = (
-      currentUser.user_metadata?.display_name?.[0] ||
-      currentUser.email?.[0] || "U"
-    ).toUpperCase();
-
-    // Load cloud data first, THEN show the app — no broken flash
+    userAvatarEl.textContent = (currentUser.user_metadata?.display_name?.[0] || currentUser.email?.[0] || "U").toUpperCase();
     await loadAllFromCloud();
     showApp();
     initApp();
-    return;
+  } else {
+    currentUser      = null;
+    appInitialized   = false;
+    showAuth();
+    tracker.innerHTML = "";
+    summary.innerHTML = "";
   }
-
-  // No session — show login
-  showAuth();
 });
 
 // ── Cloud: load ───────────────────────────────────────────────────────────────
@@ -470,31 +404,17 @@ async function loadAllFromCloud() {
     localStorage.setItem(KEY_STATUS, JSON.stringify(state));
   }
 
-  const { data: settings } = await sb
-    .from("user_settings").select("*")
+  const { data: settings } = await sb.from("user_settings").select("*")
     .eq("user_id", currentUser.id).maybeSingle();
 
   if (settings) {
     localStorage.setItem(KEY_SETTINGS, JSON.stringify({ subject: settings.subject }));
     const sel = settings.paper_selections || {};
-
     Object.keys(SUBJECT_PAPERS).forEach((subj) => {
       if (Array.isArray(sel[subj])) localStorage.setItem(paperSelKey(subj), JSON.stringify(sel[subj]));
     });
-
-    const yearsMap = sel.__yearslist__;
-    if (yearsMap) {
-      Object.entries(yearsMap).forEach(([subj, yrs]) => {
-        localStorage.setItem(yearsSelKey(subj), JSON.stringify(yrs));
-      });
-    }
-
-    const seriesToggles = sel.__seriesToggles__;
-    if (seriesToggles) {
-      Object.entries(seriesToggles).forEach(([k, v]) => {
-        localStorage.setItem(k, JSON.stringify(v));
-      });
-    }
+    if (sel.__yearslist__) Object.entries(sel.__yearslist__).forEach(([s, y]) => localStorage.setItem(yearsSelKey(s), JSON.stringify(y)));
+    if (sel.__seriesToggles__) Object.entries(sel.__seriesToggles__).forEach(([k, v]) => localStorage.setItem(k, JSON.stringify(v)));
   }
 }
 
@@ -503,11 +423,10 @@ async function saveStatusToCloud(key, status) {
   if (!currentUser) return;
   showSyncToast();
   const [subject, year, series, paper] = key.split("__");
-  const { error } = await sb.from("paper_status").upsert({
+  await sb.from("paper_status").upsert({
     user_id: currentUser.id, subject, year: parseInt(year,10), series, paper, status,
     updated_at: new Date().toISOString(),
   }, { onConflict: "user_id,subject,year,series,paper" });
-  if (error) console.error("saveStatusToCloud:", error);
   updateLeaderboard();
 }
 
@@ -530,76 +449,22 @@ async function saveSettingsToCloud() {
     if (raw) try { yearsMap[subj] = JSON.parse(raw); } catch {}
   });
   paperSelections.__yearslist__ = yearsMap;
-
   const seriesToggles = {};
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
-    if (k?.startsWith("ial-tracker-series-toggle__")) {
-      try { seriesToggles[k] = JSON.parse(localStorage.getItem(k)); } catch {}
-    }
+    if (k?.startsWith("ial-tracker-series-toggle__")) try { seriesToggles[k] = JSON.parse(localStorage.getItem(k)); } catch {}
   }
   paperSelections.__seriesToggles__ = seriesToggles;
-
   const s = loadSettings();
   await sb.from("user_settings").upsert({
-    user_id: currentUser.id,
-    subject: s?.subject || subjectSelect.value,
-    years: 0,
-    paper_selections: paperSelections,
-    updated_at: new Date().toISOString(),
+    user_id: currentUser.id, subject: s?.subject || subjectSelect.value,
+    years: 0, paper_selections: paperSelections, updated_at: new Date().toISOString(),
   }, { onConflict: "user_id" });
 }
 
 function debouncedSaveSettings() {
   clearTimeout(settingsTimer);
   settingsTimer = setTimeout(saveSettingsToCloud, 1200);
-}
-
-// ── Leaderboard ───────────────────────────────────────────────────────────────
-lbBtn.addEventListener("click", openLeaderboard);
-lbClose.addEventListener("click", () => { lbOverlay.style.display = "none"; });
-lbOverlay.addEventListener("click", (e) => { if (e.target === lbOverlay) lbOverlay.style.display = "none"; });
-
-async function openLeaderboard() {
-  lbOverlay.style.display = "flex";
-  lbList.innerHTML = `<div class="lb-loading">Loading…</div>`;
-  const { data, error } = await sb
-    .from("leaderboard").select("user_id, display_name, papers_done")
-    .order("papers_done", { ascending: false }).limit(20);
-  if (error || !data) { lbList.innerHTML = `<div class="lb-loading">Could not load leaderboard.</div>`; return; }
-  if (data.length === 0) { lbList.innerHTML = `<div class="lb-loading">No entries yet — be the first!</div>`; return; }
-  lbList.innerHTML = "";
-  data.forEach((row, i) => {
-    const rank  = i + 1;
-    const isMe  = row.user_id === currentUser?.id;
-    const div   = document.createElement("div");
-    div.className = "lb-row" + (isMe ? " lb-me" : "");
-    const rankClass = rank === 1 ? "rank-1" : rank === 2 ? "rank-2" : rank === 3 ? "rank-3" : "rank-other";
-    const rankIcon  = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`;
-    div.innerHTML = `
-      <span class="lb-rank ${rankClass}">${rankIcon}</span>
-      <span class="lb-name">${row.display_name}${isMe ? '<span class="you-tag">you</span>' : ""}</span>
-      <span class="lb-score">${row.papers_done}<span class="lb-score-label"> done</span></span>`;
-    lbList.appendChild(div);
-  });
-}
-
-async function updateLeaderboard() {
-  if (!currentUser) return;
-  const state = loadStatus();
-  const total = Object.values(state).filter((v) => v === "Done" || v === "Done + Reviewed").length;
-  const name  = currentUser.user_metadata?.display_name || currentUser.email?.split("@")[0] || "Anonymous";
-  await sb.from("leaderboard").upsert({
-    user_id: currentUser.id, display_name: name, papers_done: total,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: "user_id" });
-  if (paperCounterVal) paperCounterVal.textContent = total;
-}
-
-function refreshPaperCounter() {
-  const state = loadStatus();
-  const total = Object.values(state).filter((v) => v === "Done" || v === "Done + Reviewed").length;
-  if (paperCounterVal) paperCounterVal.textContent = total;
 }
 
 // ── localStorage helpers ──────────────────────────────────────────────────────
@@ -675,6 +540,163 @@ pickNoneBtn.addEventListener("click", () => {
   buildTracker();
 });
 
+
+// ── Profile modal ─────────────────────────────────────────────────────────────
+const profileOverlay  = document.getElementById("profile-overlay");
+const profileClose    = document.getElementById("profile-close");
+const profileNameInp  = document.getElementById("profile-name-input");
+const profileSaveBtn  = document.getElementById("profile-save-btn");
+const profileToggle   = document.getElementById("profile-toggle-btn");
+const profileMsg      = document.getElementById("profile-msg");
+
+// Open profile when user pill is clicked
+document.getElementById("user-pill").addEventListener("click", openProfile);
+profileClose.addEventListener("click", () => { profileOverlay.style.display = "none"; });
+profileOverlay.addEventListener("click", (e) => { if (e.target === profileOverlay) profileOverlay.style.display = "none"; });
+
+async function openProfile() {
+  profileOverlay.style.display = "flex";
+  profileMsg.style.display     = "none";
+
+  // Fill avatar + email
+  const name  = currentUser?.user_metadata?.display_name || currentUser?.email?.split("@")[0] || "User";
+  const email = currentUser?.email || "";
+  document.getElementById("profile-avatar-big").textContent   = name[0].toUpperCase();
+  document.getElementById("profile-name-display").textContent = name;
+  document.getElementById("profile-email-display").textContent = email;
+  profileNameInp.value = name;
+
+  // Load leaderboard data for stats
+  const { data: lb } = await sb.from("leaderboard")
+    .select("papers_done, public")
+    .eq("user_id", currentUser.id)
+    .maybeSingle();
+
+  const papersDone = lb?.papers_done ?? 0;
+  const isPublic   = lb?.public !== false; // default true
+
+  document.getElementById("profile-papers-done").textContent = papersDone;
+  profileToggle.dataset.public = isPublic ? "true" : "false";
+  document.getElementById("profile-toggle-label").textContent = isPublic
+    ? "Public — visible to others"
+    : "Private — hidden from leaderboard";
+
+  // Fetch rank (only if public)
+  if (isPublic) {
+    const { data: ranked } = await sb
+      .from("leaderboard")
+      .select("user_id")
+      .eq("public", true)
+      .order("papers_done", { ascending: false });
+    const rank = ranked ? ranked.findIndex((r) => r.user_id === currentUser.id) + 1 : null;
+    document.getElementById("profile-rank").textContent = rank ? `#${rank}` : "—";
+  } else {
+    document.getElementById("profile-rank").textContent = "Hidden";
+  }
+}
+
+// Toggle leaderboard visibility
+profileToggle.addEventListener("click", async () => {
+  const nowPublic = profileToggle.dataset.public !== "true";
+  profileToggle.dataset.public = nowPublic ? "true" : "false";
+  document.getElementById("profile-toggle-label").textContent = nowPublic
+    ? "Public — visible to others"
+    : "Private — hidden from leaderboard";
+  await sb.from("leaderboard").upsert({
+    user_id: currentUser.id, public: nowPublic,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "user_id" });
+});
+
+// Save display name
+profileSaveBtn.addEventListener("click", async () => {
+  const newName = profileNameInp.value.trim();
+  if (!newName) {
+    showProfileMsg("Please enter a name.", "error"); return;
+  }
+  profileSaveBtn.disabled    = true;
+  profileSaveBtn.textContent = "Saving…";
+
+  // Update Supabase Auth metadata
+  const { error } = await sb.auth.updateUser({ data: { display_name: newName } });
+
+  if (error) {
+    showProfileMsg(error.message, "error");
+  } else {
+    // Update leaderboard display name
+    await sb.from("leaderboard").upsert({
+      user_id: currentUser.id, display_name: newName,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id" });
+
+    // Update header
+    userAvatarEl.textContent = newName[0].toUpperCase();
+    document.getElementById("profile-avatar-big").textContent   = newName[0].toUpperCase();
+    document.getElementById("profile-name-display").textContent = newName;
+
+    // Update currentUser metadata locally
+    if (currentUser.user_metadata) currentUser.user_metadata.display_name = newName;
+
+    showProfileMsg("Name updated!", "success");
+  }
+
+  profileSaveBtn.disabled    = false;
+  profileSaveBtn.textContent = "Save";
+});
+
+function showProfileMsg(msg, type) {
+  profileMsg.textContent  = msg;
+  profileMsg.className    = `auth-msg auth-msg--${type}`;
+  profileMsg.style.display = "block";
+  setTimeout(() => { profileMsg.style.display = "none"; }, 3000);
+}
+
+// ── Leaderboard ───────────────────────────────────────────────────────────────
+lbBtn.addEventListener("click", openLeaderboard);
+lbClose.addEventListener("click", () => { lbOverlay.style.display = "none"; });
+lbOverlay.addEventListener("click", (e) => { if (e.target === lbOverlay) lbOverlay.style.display = "none"; });
+
+async function openLeaderboard() {
+  lbOverlay.style.display = "flex";
+  lbList.innerHTML = `<div class="lb-loading">Loading…</div>`;
+  const { data, error } = await sb.from("leaderboard").select("user_id, display_name, papers_done")
+    .order("papers_done", { ascending: false }).limit(20);
+  if (error || !data) { lbList.innerHTML = `<div class="lb-loading">Could not load leaderboard.</div>`; return; }
+  if (data.length === 0) { lbList.innerHTML = `<div class="lb-loading">No entries yet — be the first!</div>`; return; }
+  lbList.innerHTML = "";
+  data.forEach((row, i) => {
+    const rank  = i + 1;
+    const isMe  = row.user_id === currentUser?.id;
+    const div   = document.createElement("div");
+    div.className = "lb-row" + (isMe ? " lb-me" : "");
+    const rankClass = rank === 1 ? "rank-1" : rank === 2 ? "rank-2" : rank === 3 ? "rank-3" : "rank-other";
+    const rankIcon  = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`;
+    div.innerHTML = `
+      <span class="lb-rank ${rankClass}">${rankIcon}</span>
+      <span class="lb-name">${row.display_name}${isMe ? '<span class="you-tag">you</span>' : ""}</span>
+      <span class="lb-score">${row.papers_done}<span class="lb-score-label"> done</span></span>`;
+    lbList.appendChild(div);
+  });
+}
+
+async function updateLeaderboard() {
+  if (!currentUser) return;
+  const state = loadStatus();
+  const total = Object.values(state).filter((v) => v === "Done" || v === "Done + Reviewed").length;
+  const name  = currentUser.user_metadata?.display_name || currentUser.email?.split("@")[0] || "Anonymous";
+  await sb.from("leaderboard").upsert({
+    user_id: currentUser.id, display_name: name, papers_done: total,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "user_id" });
+  if (paperCounterVal) paperCounterVal.textContent = total;
+}
+
+function refreshPaperCounter() {
+  const state = loadStatus();
+  const total = Object.values(state).filter((v) => v === "Done" || v === "Done + Reviewed").length;
+  if (paperCounterVal) paperCounterVal.textContent = total;
+}
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 function updateSummary() {
   const counts = STATUS_OPTIONS.reduce((a, v) => ({ ...a, [v]: 0 }), {});
@@ -688,19 +710,10 @@ function updateSummary() {
   });
   const completed = counts["Done"] + counts["Done + Reviewed"];
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-
   const badges = STATUS_OPTIONS.map(
     (v) => `<span class="badge" data-status="${v}">${v} <strong>${counts[v]}</strong></span>`
   ).join("");
-
-  const bar = `
-    <div class="summary-progress">
-      <div class="summary-progress-track">
-        <div class="summary-progress-fill" style="width:${pct}%"></div>
-      </div>
-      <span class="summary-progress-label">${pct}% complete</span>
-    </div>`;
-
+  const bar = `<div class="summary-progress"><div class="summary-progress-track"><div class="summary-progress-fill" style="width:${pct}%"></div></div><span class="summary-progress-label">${pct}% complete</span></div>`;
   summary.innerHTML = badges + bar;
 }
 
@@ -767,7 +780,7 @@ function buildTracker() {
         const s       = btn.dataset.series;
         const enabled = btn.classList.contains("disabled");
         btn.classList.toggle("disabled", !enabled);
-        const newToggles = loadSeriesToggle(subject, year);
+        const newToggles  = loadSeriesToggle(subject, year);
         newToggles[s] = enabled;
         saveSeriesToggle(subject, year, newToggles);
         const section = card.querySelector(`.series[data-series="${s}"]`);
@@ -799,13 +812,6 @@ function buildTracker() {
       papers.forEach((paper) => {
         const key   = `${subject}__${year}__${seriesName}__${paper}`;
         const value = saved[key] || "Not Done";
-        const qpUrl = getPMTUrl(subject, paper, seriesName, year, "QP");
-        const msUrl = getPMTUrl(subject, paper, seriesName, year, "MS");
-        const linkHtml = qpUrl ? `
-          <div class="pmt-links">
-            <a href="${qpUrl}" target="_blank" rel="noopener" class="pmt-link pmt-qp" title="Question Paper on PMT">QP</a>
-            <a href="${msUrl}" target="_blank" rel="noopener" class="pmt-link pmt-ms" title="Mark Scheme on PMT">MS</a>
-          </div>` : "";
         const tr    = document.createElement("tr");
         tr.innerHTML = `
           <td class="paper-name">${paper}</td>
@@ -816,7 +822,6 @@ function buildTracker() {
                 `<option value="${s}"${s === value ? " selected" : ""}>${s}</option>`
               ).join("")}
             </select>
-            ${linkHtml}
           </td>`;
         tbody.appendChild(tr);
       });
@@ -861,7 +866,7 @@ function onSubjectChange() {
   buildTracker();
 }
 
-// ── App init — called once after cloud data is loaded ─────────────────────────
+// ── App init ──────────────────────────────────────────────────────────────────
 function initApp() {
   if (subjectSelect.children.length === 0) {
     Object.keys(SUBJECT_PAPERS).forEach((subj) => {
@@ -871,11 +876,9 @@ function initApp() {
     });
     subjectSelect.addEventListener("change", onSubjectChange);
   }
-
   const s             = loadSettings();
   const validSubjects = Object.keys(SUBJECT_PAPERS);
   subjectSelect.value = (s?.subject && SUBJECT_PAPERS[s.subject]) ? s.subject : validSubjects[0];
-
   refreshPaperCounter();
   onSubjectChange();
 }

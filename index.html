@@ -116,6 +116,55 @@
     </div>
   </div>
 
+  <!-- ── Profile Modal ────────────────────────────────────────────────────── -->
+  <div id="profile-overlay" class="lb-overlay" style="display:none">
+    <div class="lb-card profile-card">
+      <div class="lb-header">
+        <span class="lb-title">👤 Your Profile</span>
+        <button class="lb-close" id="profile-close">✕</button>
+      </div>
+
+      <div class="profile-avatar-row">
+        <div class="profile-avatar-big" id="profile-avatar-big"></div>
+        <div class="profile-avatar-info">
+          <div class="profile-name-display" id="profile-name-display">—</div>
+          <div class="profile-email-display" id="profile-email-display">—</div>
+        </div>
+      </div>
+
+      <div class="profile-stats">
+        <div class="profile-stat">
+          <span class="profile-stat-val" id="profile-papers-done">0</span>
+          <span class="profile-stat-label">Papers Done</span>
+        </div>
+        <div class="profile-stat">
+          <span class="profile-stat-val" id="profile-rank">—</span>
+          <span class="profile-stat-label">Leaderboard Rank</span>
+        </div>
+      </div>
+
+      <div class="profile-section">
+        <label for="profile-name-input">Display name</label>
+        <div class="profile-name-row">
+          <input type="text" id="profile-name-input" placeholder="Your name" maxlength="30" />
+          <button class="profile-save-btn" id="profile-save-btn">Save</button>
+        </div>
+        <div id="profile-msg" class="auth-msg" style="display:none;margin-top:0.5rem"></div>
+      </div>
+
+      <div class="profile-section">
+        <label>Leaderboard visibility</label>
+        <div class="profile-toggle-row">
+          <span class="profile-toggle-label" id="profile-toggle-label">Public — visible to others</span>
+          <button class="profile-toggle-btn" id="profile-toggle-btn" data-public="true">
+            <span class="profile-toggle-knob"></span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- ── Leaderboard Modal ──────────────────────────────────────────────── -->
   <div id="lb-overlay" class="lb-overlay" style="display:none">
     <div class="lb-card">
@@ -155,7 +204,7 @@
               <a class="beta-avatar" href="https://www.instagram.com/_krish_061208/" target="_blank" rel="noopener" title="@_krish_061208" style="--av-color:#22c97a">K</a>
             </div>
           </div>
-          <div class="user-pill" id="user-pill">
+          <div class="user-pill" id="user-pill" style="cursor:pointer" title="Your profile">
             <span class="user-avatar" id="user-avatar"></span>
             <span class="user-email" id="user-email"></span>
             <button class="logout-btn" id="logout-btn">Log out</button>
